@@ -1,0 +1,11 @@
+Current project status:
+
+- A working CRS prototype has been implemented.
+- The system includes:
+  1. local candidate generation
+  2. reranking
+  3. response generation
+- The pipeline works on multiple dialogue test cases.
+- A KBRD adapter has been prepared, but real KBRD resources are not yet available.
+- The UJA LLM server is reachable, but chat inference requests are timing out.
+- Therefore, the current system is validated in local/fake mode while waiting for real server inference.
