@@ -3,10 +3,10 @@ from reranker import call_qwen, USE_FAKE_MODE
 
 
 def article_for(word: str) -> str:
-    return "an" if word[0].lower() in "aeiou" else "a"
+    return "an" if word and word[0].lower() in "aeiou" else "a"
 
 
-def generate_response(history: str, selected_movie: dict) -> str:
+def generate_template_response(selected_movie: dict) -> str:
     title = selected_movie["title"]
     genre = selected_movie.get("genre", "Unknown genre").lower()
     decade = selected_movie.get("decade", "Unknown decade")
@@ -14,6 +14,20 @@ def generate_response(history: str, selected_movie: dict) -> str:
     article = article_for(genre)
 
     return (
-    f"I would recommend {title}. It is {article} {genre} movie from the {decade}. "
-    f"Based on your preferences, it seems like a good match for what you're looking for."
-)
+        f"I would recommend {title}. It is {article} {genre} movie from the {decade}. "
+        f"Based on your preferences, it seems like a good match for what you're looking for."
+    )
+
+
+def generate_response(history: str, selected_movie: dict) -> str:
+    if USE_FAKE_MODE:
+        return generate_template_response(selected_movie)
+
+    prompt = build_response_prompt(history, selected_movie)
+
+    try:
+        response = call_qwen(prompt)
+        return response.strip()
+    except Exception as e:
+        print("[Response Generator ERROR]", e)
+        return generate_template_response(selected_movie)

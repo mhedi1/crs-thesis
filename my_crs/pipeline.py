@@ -56,8 +56,8 @@ User: Modern.
 
     # First validate full prototype using local stage 1
     run_case("Old horror", case_1, use_kbrd=False)
-    run_case("Funny family animation", case_2, use_kbrd=False)
-    run_case("Modern superhero", case_3, use_kbrd=False)
+    #run_case("Funny family animation", case_2, use_kbrd=False)
+    #run_case("Modern superhero", case_3, use_kbrd=False)
 
     # Then optionally test KBRD adapter path
     #run_case("KBRD adapter check", case_1, use_kbrd=True)
