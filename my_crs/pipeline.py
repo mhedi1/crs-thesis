@@ -43,22 +43,60 @@ User: Yes, I have seen it. I want something old.
     case_2 = """
 User: I want something funny and family friendly.
 System: Do you prefer animation or live action?
-User: Animation is fine.
+User: Animation is fine, something the kids can watch.
 """.strip()
 
     case_3 = """
 User: I would like a superhero movie.
 System: Do you want something classic or modern?
-User: Modern.
+User: Modern please, something from the last 10 years.
 """.strip()
 
-    # First validate full prototype using local stage 1
-    run_case("Old horror", case_1, use_kbrd=False)
-    #run_case("Funny family animation", case_2, use_kbrd=False)
-    #run_case("Modern superhero", case_3, use_kbrd=False)
+    case_4 = """
+User: I love science fiction films.
+System: Any particular era or style?
+User: I prefer space adventures, something epic.
+""".strip()
 
-    # Then optionally test KBRD adapter path
-    run_case("KBRD adapter check", case_1, use_kbrd=True)
+    case_5 = """
+User: I am in the mood for a crime movie.
+System: Do you like action crime or psychological thriller?
+User: Psychological thriller, something classic and intelligent.
+""".strip()
+
+    case_6 = """
+User: I want something light and fun to watch tonight.
+System: Do you prefer romance or comedy?
+User: A romantic comedy would be perfect, nothing too serious.
+""".strip()
+
+    case_7 = """
+User: I feel like watching an action movie.
+System: Any particular decade you prefer?
+User: I love 80s action films, something with lots of energy.
+""".strip()
+
+    case_8 = """
+User: I am not in the mood for fiction tonight.
+System: Would you prefer a documentary?
+User: Yes, something real and interesting, maybe about nature or society.
+""".strip()
+
+    run_case("Old horror", case_1, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("Funny family animation", case_2, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("Modern superhero", case_3, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("Sci-fi space", case_4, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("Classic crime thriller", case_5, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("Romantic comedy", case_6, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("80s action", case_7, use_kbrd=True)
+    print("\n" + "-" * 70 + "\n")
+    run_case("Documentary", case_8, use_kbrd=True)
 
 
 if __name__ == "__main__":
