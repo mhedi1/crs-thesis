@@ -203,106 +203,108 @@ def _infer_genre(uri: str, title: str) -> str:
     return "Unknown"
 
 
-def _extract_preferences(dialogue: str) -> Dict[str, Any]:
-    text = dialogue.lower()
+_kbrd_agent = None
 
-    prefs = {
-        "horror": any(w in text for w in ["horror", "scary", "slasher"]),
-        "comedy": any(w in text for w in ["funny", "comedy", "laugh"]),
-        "animation": any(w in text for w in ["animation", "animated", "family", "kids"]),
-        "superhero": any(w in text for w in ["superhero", "marvel", "avengers"]),
-        "old": any(w in text for w in ["old", "classic", "older"]),
-        "modern": any(w in text for w in ["modern", "recent", "new"]),
-    }
+def _load_kbrd_model():
+    global _kbrd_agent, _has_error
+    if _kbrd_agent is not None or _has_error:
+        return
 
-    decade_match = re.search(r"(1970s|1980s|1990s|2000s|2010s|70s|80s|90s)", text)
-    prefs["decade"] = decade_match.group(1) if decade_match else None
-
-    return prefs
-
-
-def _score_movie(title: str, prefs: Dict[str, Any], year: str) -> int:
-    t = title.lower()
-    score = 0
-
-    if prefs["horror"] and any(w in t for w in ["horror", "shining", "halloween", "exorcist", "carrie"]):
-        score += 5
-
-    if prefs["comedy"] and any(w in t for w in ["comedy", "funny", "hangover", "superbad"]):
-        score += 5
-
-    if prefs["animation"] and any(w in t for w in ["toy story", "shrek", "animation"]):
-        score += 5
-
-    if prefs["superhero"] and any(w in t for w in ["avengers", "spider", "batman", "superman", "marvel"]):
-        score += 5
-
-    if year:
-        y = int(year)
-        if prefs["old"] and y < 1990:
-            score += 3
-        if prefs["modern"] and y >= 2000:
-            score += 3
-
-    return score
+    try:
+        import sys
+        if KBRD_REPO_PATH not in sys.path:
+            sys.path.insert(0, KBRD_REPO_PATH)
+            
+        from parlai.core.agents import create_agent
+        
+        print("[KBRD Neural] Loading model from saved/kbrd_model")
+        opt = {
+            'model_file': os.path.join(KBRD_REPO_PATH, 'saved', 'kbrd_model'),
+            'datatype': 'test',
+            'datapath': os.path.join(KBRD_REPO_PATH, 'data'),
+            'override': {
+                'model_file': os.path.join(KBRD_REPO_PATH, 'saved', 'kbrd_model'),
+                'datapath': os.path.join(KBRD_REPO_PATH, 'data'),
+            }
+        }
+        _kbrd_agent = create_agent(opt, requireModelExists=True)
+    except Exception as e:
+        print(f"[KBRD Neural ERROR] Failed to load model: {e}")
+        _has_error = True
 
 
 def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
     print(f"\n{'=' * 50}")
-    print("[KBRD Adapter] Starting Resource-Based Candidate Generation")
+    print("[KBRD Neural] Starting Neural KBRD Candidate Generation")
     print(f"{'=' * 50}")
 
     _load_kbrd_resources()
+    _load_kbrd_model()
 
-    if _has_error or not _data_loaded:
-        print("[KBRD Adapter] Falling back because resources are unavailable.")
+    if _has_error or not _data_loaded or _kbrd_agent is None:
+        print("[KBRD Neural] Falling back because model or resources are unavailable.")
         return get_fallback_candidates(top_k)
 
-    prefs = _extract_preferences(dialogue)
+    seed_list = prepare_input(dialogue)
+    if not seed_list:
+        print("[KBRD Neural] No entities detected in dialogue. Using fallback.")
+        return get_fallback_candidates(top_k)
 
-    scored = []
-    for movie_entity_id in _movie_ids:
-        entity_uri = _id2entity.get(movie_entity_id)
+    print("[KBRD Neural] Running inference...")
+    
+    import torch
+    seed_sets = [seed_list]
+    labels = torch.zeros(1, dtype=torch.long)
+    if _kbrd_agent.use_cuda:
+        labels = labels.cuda()
+
+    with torch.no_grad():
+        _kbrd_agent.model.eval()
+        return_dict = _kbrd_agent.model(seed_sets, labels)
+        scores = return_dict["scores"].cpu()[0]
+
+    movie_ids = _kbrd_agent.movie_ids
+    movie_scores = scores[torch.LongTensor(movie_ids)]
+    
+    # Over-sample to ensure we get enough valid movies
+    fetch_k = min(top_k * 3, len(movie_ids))
+    topk_scores, topk_indices = torch.topk(movie_scores, k=fetch_k)
+
+    candidates = []
+    for score, idx in zip(topk_scores.tolist(), topk_indices.tolist()):
+        if len(candidates) >= top_k:
+            break
+            
+        movie_id = movie_ids[idx]
+        entity_uri = _id2entity.get(movie_id)
         if not entity_uri:
             continue
-
+            
         title = _clean_title(entity_uri)
+        if not title or title.strip().isdigit() or len(title.strip()) < 2:
+            continue
+            
         if not _is_valid_movie_title(title):
             continue
-
+            
         year = _extract_year(entity_uri)
-        score = _score_movie(title, prefs, year)
-
-        if score > 0:
-            scored.append(
-                {
-                    "score": score,
-                    "id": int(movie_entity_id),
-                    "title": title,
-                    "genre": _infer_genre(entity_uri, title),
-                    "decade": _year_to_decade(year),
-                    "source": "KBRD_PROCESSED_DATA",
-                }
-            )
-
-    scored.sort(key=lambda x: x["score"], reverse=True)
-
-    candidates = [
-        {
-            "id": item["id"],
-            "title": item["title"],
-            "genre": item["genre"],
-            "decade": item["decade"],
-            "source": item["source"],
+        
+        c = {
+            "id": int(movie_id),
+            "title": title,
+            "genre": _infer_genre(entity_uri, title),
+            "decade": _year_to_decade(year),
+            "source": "KBRD_NEURAL"
         }
-        for item in scored[:top_k]
-    ]
+        candidates.append(c)
+        
+        if len(candidates) == 1:
+            print(f"[KBRD Neural] Top candidate: {title} (score: {score:.4f})")
 
     if not candidates:
-        print("[KBRD Adapter] No matching candidates found. Using fallback.")
+        print("[KBRD Neural] No valid candidates after filtering. Using fallback.")
         return get_fallback_candidates(top_k)
 
-    print(f"[KBRD Adapter] Returning {len(candidates)} candidates from processed KBRD resources.")
     return candidates
 
 
@@ -375,7 +377,22 @@ def prepare_input(dialogue: str) -> List[int]:
     # Step D: Matching pipeline
     unmatched_phrases = []
     
+    ENTITY_BLOCKLIST = {
+        "something", "anything", "nothing", "everything", "someone", "anyone",
+        "the", "this", "that", "these", "those", "yes", "no", "not", "and",
+        "but", "or", "if", "in", "on", "at", "to", "for", "of", "with",
+        "film", "films", "movie", "movies", "watch", "love", "like", "want",
+        "looking", "prefer", "enjoy", "seen", "tonight", "please", "maybe",
+        "really", "just", "would", "could", "should", "from", "about",
+        "action", "fiction", "crime", "drama", "comedy", "thriller", "fun",
+        "old", "new", "classic", "modern", "good", "great", "interesting",
+        "real", "epic", "light", "family", "kids", "funny", "scary"
+    }
+    
     for phrase in candidate_phrases:
+        if phrase in ENTITY_BLOCKLIST:
+            continue
+            
         matched = False
         
         # Stage 1: Exact Match
@@ -400,8 +417,8 @@ def prepare_input(dialogue: str) -> List[int]:
         if not matched:
             unmatched_phrases.append(phrase)
 
-    # Stage 3: Fuzzy Matching on unmatched phrases (length > 4)
-    long_unmatched = [p for p in unmatched_phrases if len(p) > 4]
+    # Stage 3: Fuzzy Matching on unmatched phrases (length >= 6)
+    long_unmatched = [p for p in unmatched_phrases if len(p) >= 6]
     movie_titles = list(_movie_title_to_id.keys())
     
     for phrase in long_unmatched:
@@ -409,7 +426,7 @@ def prepare_input(dialogue: str) -> List[int]:
         if any(phrase in dp for dp in detected_phrases):
             continue
             
-        matches = difflib.get_close_matches(phrase, movie_titles, n=3, cutoff=0.8)
+        matches = difflib.get_close_matches(phrase, movie_titles, n=3, cutoff=0.92)
         if matches:
             matched_title = matches[0]
             mid = _movie_title_to_id[matched_title]
