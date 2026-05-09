@@ -1,33 +1,41 @@
+import logging
 from prompts import build_response_prompt
 from reranker import call_qwen, USE_FAKE_MODE
 
-
-def article_for(word: str) -> str:
-    return "an" if word and word[0].lower() in "aeiou" else "a"
+logger = logging.getLogger(__name__)
 
 
-def generate_template_response(selected_movie: dict) -> str:
-    title = selected_movie["title"]
-    genre = selected_movie.get("genre", "Unknown genre").lower()
-    decade = selected_movie.get("decade", "Unknown decade")
-
-    article = article_for(genre)
-
-    return (
-        f"I would recommend {title}. It is {article} {genre} movie from the {decade}. "
-        f"Based on your preferences, it seems like a good match for what you're looking for."
-    )
+def _fallback_response(movie: dict) -> str:
+    title = movie.get("title", "this film")
+    genre = movie.get("genre", "")
+    decade = movie.get("decade", "")
+    parts = []
+    if genre and genre != "Unknown":
+        parts.append(genre.lower())
+    if decade and decade != "Unknown":
+        parts.append(f"from the {decade}")
+    description = " ".join(parts)
+    if description:
+        return (f"I would recommend {title}. "
+                f"It is a great {description} film that "
+                f"matches what you are looking for.")
+    else:
+        return (f"I would recommend {title}. "
+                f"I think it fits well with what you described.")
 
 
 def generate_response(history: str, selected_movie: dict) -> str:
     if USE_FAKE_MODE:
-        return generate_template_response(selected_movie)
+        return _fallback_response(selected_movie)
 
     prompt = build_response_prompt(history, selected_movie)
 
     try:
         response = call_qwen(prompt)
+        if not response or not response.strip():
+            logger.warning("[Response Generator] Empty output from Qwen.")
+            return _fallback_response(selected_movie)
         return response.strip()
     except Exception as e:
-        print("[Response Generator ERROR]", e)
-        return generate_template_response(selected_movie)
+        logger.error(f"[Response Generator ERROR] {e}")
+        return _fallback_response(selected_movie)

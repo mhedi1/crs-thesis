@@ -1,6 +1,9 @@
 import requests
+import logging
 from prompts import build_rerank_prompt
 from utils import parse_answer_id
+
+logger = logging.getLogger(__name__)
 
 LLM_URL = "http://sinbad2ia.ujaen.es:8050/api/chat"
 MODEL_NAME = "qwen3.5:35b"
@@ -31,49 +34,44 @@ def call_qwen(messages) -> str:
     else:
         payload_messages = messages
 
-    try:
-        response = requests.post(
-            LLM_URL,
-            json={
-                "model": MODEL_NAME,
-                "messages": payload_messages,
-                "stream": False
-            },
-            timeout=180
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["message"]["content"]
-
-    except requests.exceptions.RequestException as e:
-        print("[QWEN ERROR]", e)
-        return "ANSWER: 1"
-
-    response = requests.post(
-        LLM_URL,
-        json={
-            "model": MODEL_NAME,
-            "messages": payload_messages,
-            "stream": False
-        },
-        timeout=180
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data["message"]["content"]
+    for attempt in range(3):
+        try:
+            response = requests.post(
+                LLM_URL,
+                json={
+                    "model": MODEL_NAME,
+                    "messages": payload_messages,
+                    "stream": False,
+                    "think": False
+                },
+                timeout=60
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["message"]["content"]
+        except requests.exceptions.RequestException as e:
+            if attempt < 2:
+                logger.warning(f"Qwen timeout or error, retrying ({attempt + 1}/2)...")
+            else:
+                logger.error(f"[QWEN ERROR] {e}")
+                raise
 
 
 def rerank(history: str, candidates: list[dict]) -> dict:
     prompt = build_rerank_prompt(history, candidates)
-    raw_output = call_qwen(prompt)
+    try:
+        raw_output = call_qwen(prompt)
+    except Exception as e:
+        logger.warning("[Reranker] Qwen call failed after retries. Using fallback.")
+        return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}
 
     answer_id = parse_answer_id(raw_output)
 
     if answer_id is None:
-        return candidates[0]
+        return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}
 
     for candidate in candidates:
         if candidate["id"] == answer_id:
             return candidate
 
-    return candidates[0]
+    return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}

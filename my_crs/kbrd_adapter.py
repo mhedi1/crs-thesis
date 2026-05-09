@@ -4,7 +4,10 @@ import re
 import difflib
 import spacy
 from typing import List, Dict, Any
+import logging
 import warnings
+
+logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 GENRE_KEYWORDS = {
@@ -70,7 +73,7 @@ def _load_kbrd_resources() -> None:
     if _data_loaded or _has_error:
         return
 
-    print("[KBRD Adapter] Loading processed KBRD resources...")
+    logger.info("[KBRD Adapter] Loading processed KBRD resources...")
 
     data_dir = os.path.join(KBRD_REPO_PATH, "data", "redial")
     entity2id_path = os.path.join(data_dir, "entity2entityId.pkl")
@@ -96,10 +99,10 @@ def _load_kbrd_resources() -> None:
 
         _data_loaded = True
 
-        print(f"[KBRD Adapter] Loaded {len(_id2entity)} entities and {len(_movie_ids)} movie ids.")
+        logger.info(f"[KBRD Adapter] Loaded {len(_id2entity)} entities and {len(_movie_ids)} movie ids.")
 
     except Exception as e:
-        print(f"[KBRD Adapter ERROR] Could not load KBRD resources: {e}")
+        logger.error(f"[KBRD Adapter ERROR] Could not load KBRD resources: {e}")
         _has_error = True
 
 
@@ -219,7 +222,7 @@ def _load_kbrd_model():
             
         from parlai.core.agents import create_agent
         
-        print("[KBRD Neural] Loading model from saved/kbrd_model")
+        logger.info("[KBRD Neural] Loading model from saved/kbrd_model")
         opt = {
             'model_file': os.path.join(KBRD_REPO_PATH, 'saved', 'kbrd_model'),
             'datatype': 'test',
@@ -231,26 +234,26 @@ def _load_kbrd_model():
         }
         _kbrd_agent = create_agent(opt, requireModelExists=True)
     except Exception as e:
-        print(f"[KBRD Neural ERROR] Failed to load model: {e}")
+        logger.error(f"[KBRD Neural ERROR] Failed to load model: {e}")
         _has_error = True
 
 
 def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    print(f"\n{'=' * 50}")
-    print("[KBRD Neural] Starting Neural KBRD Candidate Generation")
-    print(f"{'=' * 50}")
+    logger.info(f"\n{'=' * 50}")
+    logger.info("[KBRD Neural] Starting Neural KBRD Candidate Generation")
+    logger.info(f"{'=' * 50}")
 
     _load_kbrd_resources()
     _load_kbrd_model()
 
     if _has_error or not _data_loaded or _kbrd_agent is None:
-        print("[KBRD Neural] Falling back because model or resources are unavailable.")
+        logger.warning("[KBRD Neural] Falling back because model or resources are unavailable.")
         return get_fallback_candidates(top_k)
 
     seed_list = prepare_input(dialogue)
 
     if len(seed_list) < 4:
-        print("[KBRD Adapter] Weak seeds detected, using Qwen fallback")
+        logger.warning("[KBRD Adapter] Weak seeds detected, using Qwen fallback")
         try:
             import requests
             import difflib
@@ -266,14 +269,15 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
             payload = {
                 "model": "qwen3.5:35b",
                 "messages": [{"role": "user", "content": prompt}],
-                "stream": False
+                "stream": False,
+                "think": False
             }
             response = requests.post("http://sinbad2ia.ujaen.es:8050/api/chat", json=payload, timeout=120)
             response.raise_for_status()
             
             content = response.json().get("message", {}).get("content", "")
             titles = [t.strip() for t in content.split('\n') if t.strip()]
-            print(f"[KBRD Adapter] Qwen suggested seeds: {', '.join(titles)}")
+            logger.debug(f"[KBRD Adapter] Qwen suggested seeds: {', '.join(titles)}")
             
             added_count = 0
             for title in titles:
@@ -292,15 +296,15 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
                             added_count += 1
                             
             if added_count > 0:
-                print(f"[KBRD Adapter] Added {added_count} semantic seed entities")
+                logger.debug(f"[KBRD Adapter] Added {added_count} semantic seed entities")
         except Exception as e:
-            print(f"[KBRD Adapter] Qwen fallback error: {e}")
+            logger.error(f"[KBRD Adapter] Qwen fallback error: {e}")
 
     if not seed_list:
-        print("[KBRD Neural] No entities detected in dialogue. Using fallback.")
+        logger.warning("[KBRD Neural] No entities detected in dialogue. Using fallback.")
         return get_fallback_candidates(top_k)
 
-    print("[KBRD Neural] Running inference...")
+    logger.info("[KBRD Neural] Running inference...")
     
     import torch
     seed_sets = [seed_list]
@@ -349,10 +353,10 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
         candidates.append(c)
         
         if len(candidates) == 1:
-            print(f"[KBRD Neural] Top candidate: {title} (score: {score:.4f})")
+            logger.info(f"[KBRD Neural] Top candidate: {title} (score: {score:.4f})")
 
     if not candidates:
-        print("[KBRD Neural] No valid candidates after filtering. Using fallback.")
+        logger.warning("[KBRD Neural] No valid candidates after filtering. Using fallback.")
         return get_fallback_candidates(top_k)
 
     return candidates
@@ -386,11 +390,11 @@ def prepare_input(dialogue: str) -> List[int]:
     4. Uses exact, case-insensitive, and fuzzy matching.
     5. Maps genres dynamically.
     """
-    print("[KBRD Adapter] -> STAGE 2: Preparing input from dialogue...")
+    logger.info("[KBRD Adapter] -> STAGE 2: Preparing input from dialogue...")
     _load_kbrd_resources()
 
     if _has_error or not _entity2id:
-        print("[KBRD Adapter WARNING] Skipping input preparation due to prior errors.")
+        logger.warning("[KBRD Adapter WARNING] Skipping input preparation due to prior errors.")
         return []
 
     # Step A: Preprocessing
@@ -511,11 +515,11 @@ def prepare_input(dialogue: str) -> List[int]:
     # Step F & G: Deduplication and Logging
     seed_list = list(seed_set)
     if not seed_list:
-        print("[KBRD Adapter WARNING] No matching entities or movies found in dialogue.")
+        logger.warning("[KBRD Adapter WARNING] No matching entities or movies found in dialogue.")
     else:
-        print(f"[KBRD Adapter] Detected Entities:")
+        logger.debug(f"[KBRD Adapter] Detected Entities:")
         for dp in detected_phrases:
-            print(f"  - {dp}")
-        print(f"[KBRD Adapter] Found {len(seed_list)} DBpedia entities linked to dialogue.")
+            logger.debug(f"  - {dp}")
+        logger.debug(f"[KBRD Adapter] Found {len(seed_list)} DBpedia entities linked to dialogue.")
 
     return seed_list

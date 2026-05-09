@@ -1,0 +1,36 @@
+# Paths
+paths:
+  kbrd_repo: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD"
+  data: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD\\data\\redial"
+  model: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD\\saved\\kbrd_model"
+  test_data: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD\\data\\redial\\test_data.jsonl"
+  embeddings: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\my_crs\\movie_embeddings.pkl"
+
+# Qwen server
+qwen:
+  server_url: "http://sinbad2ia.ujaen.es:8050/api/chat"
+  model: "qwen3.5:35b"
+  timeout: 60
+  max_retries: 2
+  think: false
+
+# Pipeline settings
+pipeline:
+  top_k_candidates: 50
+  fallback_threshold: 4
+
+# Evaluation settings
+evaluation:
+  max_samples: 200
+  k_values: [1, 10, 50]
+
+# Web app settings
+webapp:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
