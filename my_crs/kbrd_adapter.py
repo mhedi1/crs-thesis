@@ -4,6 +4,8 @@ import re
 import difflib
 import spacy
 from typing import List, Dict, Any
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 GENRE_KEYWORDS = {
     "Horror": ["horror", "scary", "ghost", "zombie", "vampire", "slasher", "haunting", "exorcist", "amityville"],
@@ -270,7 +272,6 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
             response.raise_for_status()
             
             content = response.json().get("message", {}).get("content", "")
-            print(f"[KBRD Adapter] Qwen raw response: {content}")
             titles = [t.strip() for t in content.split('\n') if t.strip()]
             print(f"[KBRD Adapter] Qwen suggested seeds: {', '.join(titles)}")
             
