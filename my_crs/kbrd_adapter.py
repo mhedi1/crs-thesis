@@ -246,6 +246,55 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
         return get_fallback_candidates(top_k)
 
     seed_list = prepare_input(dialogue)
+
+    if len(seed_list) < 4:
+        print("[KBRD Adapter] Weak seeds detected, using Qwen fallback")
+        try:
+            import requests
+            import difflib
+            prompt = (
+                "Based on this movie recommendation conversation, \n"
+                "name exactly 3 well-known movies that match what \n"
+                "the user is looking for. Return only movie titles, \n"
+                "one per line, nothing else.\n"
+                "\n"
+                "Conversation:\n"
+                f"{dialogue}"
+            )
+            payload = {
+                "model": "qwen3.5:35b",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False
+            }
+            response = requests.post("http://sinbad2ia.ujaen.es:8050/api/chat", json=payload, timeout=120)
+            response.raise_for_status()
+            
+            content = response.json().get("message", {}).get("content", "")
+            print(f"[KBRD Adapter] Qwen raw response: {content}")
+            titles = [t.strip() for t in content.split('\n') if t.strip()]
+            print(f"[KBRD Adapter] Qwen suggested seeds: {', '.join(titles)}")
+            
+            added_count = 0
+            for title in titles:
+                clean_t = re.sub(r"[^\w\s]", "", title.lower()).strip()
+                if clean_t in _movie_title_to_id:
+                    mid = _movie_title_to_id[clean_t]
+                    if mid not in seed_list:
+                        seed_list.append(mid)
+                        added_count += 1
+                else:
+                    matches = difflib.get_close_matches(clean_t, _movie_title_to_id.keys(), n=1, cutoff=0.85)
+                    if matches:
+                        mid = _movie_title_to_id[matches[0]]
+                        if mid not in seed_list:
+                            seed_list.append(mid)
+                            added_count += 1
+                            
+            if added_count > 0:
+                print(f"[KBRD Adapter] Added {added_count} semantic seed entities")
+        except Exception as e:
+            print(f"[KBRD Adapter] Qwen fallback error: {e}")
+
     if not seed_list:
         print("[KBRD Neural] No entities detected in dialogue. Using fallback.")
         return get_fallback_candidates(top_k)

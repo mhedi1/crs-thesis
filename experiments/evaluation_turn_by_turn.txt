@@ -4,13 +4,5 @@ Conversations: 200
 Instances: 640
 
 Recall@1: 0.0563
-Recall@10: 0.2531
-Recall@50: 0.4313
-
-Comparison Table:
-Method          | R@1   | R@10  | R@50
-------------------------------------------
-My full conv    | 0.190 | 0.570 | 0.745
-My turn by turn | 0.056 | 0.253 | 0.431
-KBRD paper      | 0.031 | 0.150 | 0.336
-TPLM paper      | 0.059 | 0.232 | 0.471
+Recall@10: 0.2313
+Recall@50: 0.4188

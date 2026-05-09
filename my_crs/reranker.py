@@ -7,8 +7,12 @@ MODEL_NAME = "qwen3.5:35b"
 USE_FAKE_MODE = False
 
 
-def call_qwen(prompt: str) -> str:
+def call_qwen(messages) -> str:
     if USE_FAKE_MODE:
+        if isinstance(messages, list):
+            prompt = messages[-1]["content"]
+        else:
+            prompt = messages
         prompt_lower = prompt.lower()
 
         if "superhero" in prompt_lower or "marvel" in prompt_lower or "modern" in prompt_lower:
@@ -22,12 +26,17 @@ def call_qwen(prompt: str) -> str:
 
         return "ANSWER: 1"
 
+    if isinstance(messages, str):
+        payload_messages = [{"role": "user", "content": messages}]
+    else:
+        payload_messages = messages
+
     try:
         response = requests.post(
             LLM_URL,
             json={
                 "model": MODEL_NAME,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": payload_messages,
                 "stream": False
             },
             timeout=180
@@ -44,7 +53,7 @@ def call_qwen(prompt: str) -> str:
         LLM_URL,
         json={
             "model": MODEL_NAME,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": payload_messages,
             "stream": False
         },
         timeout=180
@@ -57,9 +66,6 @@ def call_qwen(prompt: str) -> str:
 def rerank(history: str, candidates: list[dict]) -> dict:
     prompt = build_rerank_prompt(history, candidates)
     raw_output = call_qwen(prompt)
-
-    print("\n[DEBUG] Raw reranker output:")
-    print(raw_output)
 
     answer_id = parse_answer_id(raw_output)
 

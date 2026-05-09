@@ -15,11 +15,12 @@ def build_rerank_prompt(history: str, candidates: list[dict]) -> str:
 
     candidate_block = "\n".join(candidate_lines)
 
-    prompt = f"""You are a movie recommendation reranker.
-
-Select the single best movie from the candidate list based on the dialogue.
+    messages = [
+        {"role": "system", "content": "You are a movie recommendation reranker."},
+        {"role": "user", "content": f"""Select the single best movie from the candidate list based on the dialogue.
 Follow explicit user constraints strictly.
 Prefer candidates that match genre, year/era, and semantic clues from the conversation.
+Pay special attention to exclusions — if the user has already seen a movie, mentioned disliking it, or asked for something different, do NOT select that movie even if it appears in the candidate list.
 
 Return only:
 ANSWER: <candidate_id>
@@ -28,15 +29,30 @@ Dialogue:
 {history}
 
 Candidates:
-{candidate_block}
-"""
-    return prompt
+{candidate_block}"""}
+    ]
+    return messages
 
 
-def build_response_prompt(history: str, selected_movie: dict) -> str:
+def build_response_prompt(history: str, selected_movie: dict, reason_hints: str = None) -> str:
     """
     Build the prompt for natural response generation.
     """
+    if reason_hints is None:
+        lines = history.split('\n')
+        last_user_msg = ""
+        for line in reversed(lines):
+            if line.startswith("User:"):
+                last_user_msg = line
+                break
+        
+        if last_user_msg.startswith("User:"):
+            last_user_msg = last_user_msg[5:].strip()
+            
+        reason_hints = last_user_msg[:50]
+        if not reason_hints:
+            reason_hints = "matches user preference from conversation"
+
     prompt = f"""You are a helpful and natural movie recommender.
 
 Write one conversational response using the selected recommendation.
@@ -51,6 +67,6 @@ Dialogue:
 {history}
 
 Selected recommendation:
-{selected_movie['title']} | genres: {selected_movie.get('genre', 'unknown')} | decade: {selected_movie.get('decade', 'unknown')}
+{selected_movie['title']} | genres: {selected_movie.get('genre', 'unknown')} | decade: {selected_movie.get('decade', 'unknown')} | reason hints: {reason_hints}
 """
     return prompt
