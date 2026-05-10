@@ -65,13 +65,24 @@ def rerank(history: str, candidates: list[dict]) -> dict:
         logger.warning("[Reranker] Qwen call failed after retries. Using fallback.")
         return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}
 
-    answer_id = parse_answer_id(raw_output)
+    answer_idx = parse_answer_id(raw_output)
 
-    if answer_id is None:
-        return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}
+    if answer_idx is None:
+        logger.warning("[Reranker] Could not parse answer. Using fallback.")
+        return candidates[0] if candidates else {
+            "title": "Unknown", 
+            "genre": "Unknown", 
+            "decade": "Unknown"
+        }
 
-    for candidate in candidates:
-        if candidate["id"] == answer_id:
-            return candidate
+    if answer_idx < 1 or answer_idx > len(candidates):
+        logger.warning(f"[Reranker] Answer index {answer_idx} out of range. Using fallback.")
+        return candidates[0] if candidates else {
+            "title": "Unknown",
+            "genre": "Unknown", 
+            "decade": "Unknown"
+        }
 
-    return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}
+    selected = candidates[answer_idx - 1]
+    logger.info(f"[Reranker] Qwen selected position {answer_idx}: {selected['title']}")
+    return selected

@@ -8,9 +8,11 @@ def build_rerank_prompt(history: str, candidates: list[dict]) -> str:
     - decade
     """
     candidate_lines = []
-    for c in candidates:
+    for i, c in enumerate(candidates):
         candidate_lines.append(
-            f"{c['id']}. {c['title']} | genres: {c.get('genre', 'unknown')} | decade: {c.get('decade', 'unknown')}"
+            f"{i+1}. {c['title']} | "
+            f"genres: {c.get('genre', 'Unknown')} | "
+            f"decade: {c.get('decade', 'Unknown')}"
         )
 
     candidate_block = "\n".join(candidate_lines)
@@ -23,7 +25,8 @@ Prefer candidates that match genre, year/era, and semantic clues from the conver
 Pay special attention to exclusions — if the user has already seen a movie, mentioned disliking it, or asked for something different, do NOT select that movie even if it appears in the candidate list.
 
 Return only:
-ANSWER: <candidate_id>
+ANSWER: <number>
+where <number> is the position in the list (1 to 50)
 
 Dialogue:
 {history}

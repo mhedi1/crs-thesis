@@ -17,7 +17,7 @@ def _fallback_response(movie: dict) -> str:
     description = " ".join(parts)
     if description:
         return (f"I would recommend {title}. "
-                f"It is a great {description} film that "
+                f"It is a great film {description} that "
                 f"matches what you are looking for.")
     else:
         return (f"I would recommend {title}. "
