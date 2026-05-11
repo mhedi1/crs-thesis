@@ -6,6 +6,7 @@ import spacy
 from typing import List, Dict, Any
 import logging
 import warnings
+from fuzzywuzzy import fuzz
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -238,7 +239,7 @@ def _load_kbrd_model():
         _has_error = True
 
 
-def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
+def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
     logger.info(f"\n{'=' * 50}")
     logger.info("[KBRD Neural] Starting Neural KBRD Candidate Generation")
     logger.info(f"{'=' * 50}")
@@ -248,9 +249,9 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
 
     if _has_error or not _data_loaded or _kbrd_agent is None:
         logger.warning("[KBRD Neural] Falling back because model or resources are unavailable.")
-        return get_fallback_candidates(top_k)
+        return get_fallback_candidates(top_k), []
 
-    seed_list = prepare_input(dialogue)
+    seed_list, detected_decades = prepare_input(dialogue)
 
     if len(seed_list) < 4:
         logger.warning("[KBRD Adapter] Weak seeds detected, using Qwen fallback")
@@ -272,7 +273,7 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
                 "stream": False,
                 "think": False
             }
-            response = requests.post("http://sinbad2ia.ujaen.es:8050/api/chat", json=payload, timeout=120)
+            response = requests.post("http://sinbad2ia.ujaen.es:8050/api/chat", json=payload, timeout=30)
             response.raise_for_status()
             
             content = response.json().get("message", {}).get("content", "")
@@ -302,7 +303,7 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
 
     if not seed_list:
         logger.warning("[KBRD Neural] No entities detected in dialogue. Using fallback.")
-        return get_fallback_candidates(top_k)
+        return get_fallback_candidates(top_k), detected_decades
 
     logger.info("[KBRD Neural] Running inference...")
     
@@ -357,9 +358,9 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> List[Dict[str, Any]]:
 
     if not candidates:
         logger.warning("[KBRD Neural] No valid candidates after filtering. Using fallback.")
-        return get_fallback_candidates(top_k)
+        return get_fallback_candidates(top_k), detected_decades
 
-    return candidates
+    return candidates, detected_decades
 
 
 def _get_ngrams(words: List[str], n: int) -> List[str]:
@@ -381,7 +382,7 @@ def _get_spacy_nlp():
     return _nlp
 
 
-def prepare_input(dialogue: str) -> List[int]:
+def prepare_input(dialogue: str) -> tuple:
     """
     Hybrid entity extraction & linking module (spaCy + N-grams).
     1. Extracts spaCy named entities and noun chunks.
@@ -395,7 +396,7 @@ def prepare_input(dialogue: str) -> List[int]:
 
     if _has_error or not _entity2id:
         logger.warning("[KBRD Adapter WARNING] Skipping input preparation due to prior errors.")
-        return []
+        return [], []
 
     # Step A: Preprocessing
     clean_dialogue = re.sub(r"[^\w\s]", "", dialogue.lower()).strip()
@@ -512,6 +513,78 @@ def prepare_input(dialogue: str) -> List[int]:
                     seed_set.add(eid)
                     detected_phrases.append(f"'{word}' (Genre Mapping)")
 
+    # ADD BLOCK 1 — Person detection (actors/directors)
+    entity_map = {eid: _clean_title(uri) for eid, uri in _id2entity.items()}
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            person_name = ent.text.strip()
+            person_name_lower = person_name.lower()
+            best_match = None
+            best_score = 0
+            for entity_id, entity_name in entity_map.items():
+                entity_lower = entity_name.lower()
+                if person_name_lower == entity_lower:
+                    best_match = entity_id
+                    best_score = 100
+                    break
+                score = fuzz.ratio(person_name_lower,
+                                  entity_lower)
+                if score > 85 and score > best_score:
+                    best_score = score
+                    best_match = entity_id
+            if best_match is not None:
+                seed_set.add(best_match)
+                detected_phrases.append(f"'{person_name}' (Person Actor/Director)")
+                logger.info(
+                    f"[KBRD Adapter] Person detected: "
+                    f"'{person_name}'"
+                )
+
+    # ADD BLOCK 2 — Temporal clue detection
+    # Detect explicit decade mentions
+    decade_patterns = [
+        (r'\b(192\d)s?\b', '1920s'),
+        (r'\b(193\d)s?\b', '1930s'),
+        (r'\b(194\d)s?\b', '1940s'),
+        (r'\b(195\d)s?\b', '1950s'),
+        (r'\b(196\d)s?\b', '1960s'),
+        (r'\b(197\d)s?\b', '1970s'),
+        (r'\b(198\d)s?\b', '1980s'),
+        (r'\b(199\d)s?\b', '1990s'),
+        (r'\b(200\d)s?\b', '2000s'),
+        (r'\b(201\d)s?\b', '2010s'),
+        (r'\b20s\b|twenties', '1920s'),
+        (r'\b30s\b|thirties', '1930s'),
+        (r'\b40s\b|forties', '1940s'),
+        (r'\b50s\b|fifties', '1950s'),
+        (r'\b60s\b|sixties', '1960s'),
+        (r'\b70s\b|seventies', '1970s'),
+        (r'\b80s\b|eighties', '1980s'),
+        (r'\b90s\b|nineties', '1990s'),
+        (r'\bclassic\b|\bvintage\b|\bold\b|\bolder\b', 
+         '1970s'),
+        (r'\bmodern\b|\brecent\b|\bnew\b|\blatest\b',
+         '2010s'),
+    ]
+
+    dialogue_lower = dialogue.lower()
+    detected_decades = []
+    for pattern, decade in decade_patterns:
+        if re.search(pattern, dialogue_lower):
+            detected_decades.append(decade)
+            logger.info(
+                f"[KBRD Adapter] Temporal clue detected:"
+                f" {decade}"
+            )
+
+    # Store detected decades for use in reranking hint
+    if detected_decades:
+        # Add to context so Qwen knows user preference
+        logger.info(
+            f"[KBRD Adapter] User era preference: "
+            f"{detected_decades}"
+        )
+
     # Step F & G: Deduplication and Logging
     seed_list = list(seed_set)
     if not seed_list:
@@ -522,4 +595,4 @@ def prepare_input(dialogue: str) -> List[int]:
             logger.debug(f"  - {dp}")
         logger.debug(f"[KBRD Adapter] Found {len(seed_list)} DBpedia entities linked to dialogue.")
 
-    return seed_list
+    return seed_list, detected_decades

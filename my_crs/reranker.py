@@ -57,8 +57,8 @@ def call_qwen(messages) -> str:
                 raise
 
 
-def rerank(history: str, candidates: list[dict]) -> dict:
-    prompt = build_rerank_prompt(history, candidates)
+def rerank(history: str, candidates: list[dict], era_hints: list = None) -> dict:
+    prompt = build_rerank_prompt(history, candidates, era_hints=era_hints)
     try:
         raw_output = call_qwen(prompt)
     except Exception as e:

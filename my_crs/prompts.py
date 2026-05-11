@@ -1,4 +1,18 @@
-def build_rerank_prompt(history: str, candidates: list[dict]) -> str:
+def truncate_history(history: str, 
+                     max_turns: int = 5) -> str:
+    """
+    Keep only the last max_turns lines of dialogue.
+    Prevents prompt overflow for long conversations.
+    """
+    lines = [l for l in history.strip().split('\n') 
+             if l.strip()]
+    if len(lines) <= max_turns:
+        return history
+    truncated = lines[-max_turns:]
+    return '\n'.join(truncated)
+
+
+def build_rerank_prompt(history: str, candidates: list[dict], era_hints: list = None) -> str:
     """
     Build the prompt for Qwen reranking.
     Each candidate should have:
@@ -7,15 +21,28 @@ def build_rerank_prompt(history: str, candidates: list[dict]) -> str:
     - genre
     - decade
     """
+    history = truncate_history(history, max_turns=5)
     candidate_lines = []
     for i, c in enumerate(candidates):
+        parts = [c['title']]
+        genre = c.get('genre', 'Unknown')
+        decade = c.get('decade', 'Unknown')
+        if genre and genre != 'Unknown':
+            parts.append(genre)
+        if decade and decade != 'Unknown':
+            parts.append(decade)
         candidate_lines.append(
-            f"{i+1}. {c['title']} | "
-            f"genres: {c.get('genre', 'Unknown')} | "
-            f"decade: {c.get('decade', 'Unknown')}"
+            f"{i+1}. {' | '.join(parts)}"
         )
 
     candidate_block = "\n".join(candidate_lines)
+
+    era_section = ""
+    if era_hints:
+        eras = ", ".join(era_hints)
+        era_section = (f"\nDetected user era preference: "
+                       f"{eras}. Strongly prefer candidates"
+                       f" from this era.\n")
 
     messages = [
         {"role": "system", "content": "You are a movie recommendation reranker."},
@@ -27,11 +54,11 @@ Pay special attention to exclusions — if the user has already seen a movie, me
 Return only:
 ANSWER: <number>
 where <number> is the position in the list (1 to 50)
-
-Dialogue:
+{era_section}
+[Dialogue History]
 {history}
 
-Candidates:
+[Candidate List]
 {candidate_block}"""}
     ]
     return messages
@@ -41,6 +68,7 @@ def build_response_prompt(history: str, selected_movie: dict, reason_hints: str 
     """
     Build the prompt for natural response generation.
     """
+    history = truncate_history(history, max_turns=5)
     if reason_hints is None:
         lines = history.split('\n')
         last_user_msg = ""

@@ -1,5 +1,5 @@
 import logging
-from prompts import build_response_prompt
+from prompts import truncate_history
 from reranker import call_qwen, USE_FAKE_MODE
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,35 @@ def generate_response(history: str, selected_movie: dict) -> str:
     if USE_FAKE_MODE:
         return _fallback_response(selected_movie)
 
-    prompt = build_response_prompt(history, selected_movie)
+    history = truncate_history(history, max_turns=5)
+    
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful and natural "
+                       "conversational movie recommender."
+        },
+        {
+            "role": "user", 
+            "content": (
+                "Write one conversational response using "
+                "the selected recommendation.\n"
+                "The reply must:\n"
+                "- mention the movie naturally\n"
+                "- justify it with the user's preferences\n"
+                "- sound concise and friendly\n"
+                "- avoid mentioning unselected candidates\n\n"
+                f"[Dialogue History]\n{history}\n\n"
+                f"[Selected Recommendation]\n"
+                f"{selected_movie['title']}"
+                f"{' | ' + selected_movie['genre'] if selected_movie.get('genre') and selected_movie['genre'] != 'Unknown' else ''}"
+                f"{' | ' + selected_movie['decade'] if selected_movie.get('decade') and selected_movie['decade'] != 'Unknown' else ''}"
+            )
+        }
+    ]
 
     try:
-        response = call_qwen(prompt)
+        response = call_qwen(messages)
         if not response or not response.strip():
             logger.warning("[Response Generator] Empty output from Qwen.")
             return _fallback_response(selected_movie)

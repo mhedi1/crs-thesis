@@ -46,10 +46,10 @@ def get_recommendation(dialogue_history: list) -> dict:
     dialogue_str = "\n".join(turns)
     
     # Stage 1: Get candidates from KBRD
-    candidates = get_kbrd_candidates(dialogue_str, top_k=50)
+    candidates, detected_decades = get_kbrd_candidates(dialogue_str, top_k=50)
     
     # Stage 2: Rerank with Qwen
-    selected_movie = rerank(dialogue_str, candidates)
+    selected_movie = rerank(dialogue_str, candidates, era_hints=detected_decades)
     
     # Stage 3: Generate response with Qwen
     response = generate_response(dialogue_str, selected_movie)
@@ -66,17 +66,57 @@ def get_recommendation(dialogue_history: list) -> dict:
 
 
 if __name__ == "__main__":
-    test_history = [
-        {"role": "user", 
+    
+    # Test 1 — Original horror test
+    print("\n" + "="*60)
+    print("TEST 1: Old horror film")
+    print("="*60)
+    test1 = [
+        {"role": "user",
          "content": "I am looking for a horror film"},
-        {"role": "system", 
+        {"role": "system",
          "content": "Did you see A Nightmare on Elm Street?"},
-        {"role": "user", 
+        {"role": "user",
          "content": "Yes I have seen it. I want something old."}
     ]
-    
-    result = get_recommendation(test_history)
-    print("Movie:", result["movie"]["title"])
-    print("Genre:", result["movie"]["genre"])
-    print("Decade:", result["movie"]["decade"])
-    print("Response:", result["response"])
+    result1 = get_recommendation(test1)
+    print("Movie:", result1["movie"]["title"])
+    print("Genre:", result1["movie"]["genre"])
+    print("Decade:", result1["movie"]["decade"])
+    print("Response:", result1["response"])
+
+    # Test 2 — Actor name test
+    print("\n" + "="*60)
+    print("TEST 2: Actor name (Tom Hanks)")
+    print("="*60)
+    test2 = [
+        {"role": "user",
+         "content": "I love Tom Hanks movies"},
+        {"role": "system",
+         "content": "Have you seen Forrest Gump?"},
+        {"role": "user",
+         "content": "Yes loved it, something similar please"}
+    ]
+    result2 = get_recommendation(test2)
+    print("Movie:", result2["movie"]["title"])
+    print("Genre:", result2["movie"]["genre"])
+    print("Decade:", result2["movie"]["decade"])
+    print("Response:", result2["response"])
+
+    # Test 3 — Temporal clue test
+    print("\n" + "="*60)
+    print("TEST 3: Decade preference (80s horror)")
+    print("="*60)
+    test3 = [
+        {"role": "user",
+         "content": "I want something from the 80s"},
+        {"role": "system",
+         "content": "Do you like horror from that era?"},
+        {"role": "user",
+         "content": "Yes exactly, old classic horror"}
+    ]
+    result3 = get_recommendation(test3)
+    print("Movie:", result3["movie"]["title"])
+    print("Genre:", result3["movie"]["genre"])
+    print("Decade:", result3["movie"]["decade"])
+    print("Response:", result3["response"])
