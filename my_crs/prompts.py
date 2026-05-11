@@ -12,7 +12,7 @@ def truncate_history(history: str,
     return '\n'.join(truncated)
 
 
-def build_rerank_prompt(history: str, candidates: list[dict], era_hints: list = None) -> str:
+def build_rerank_prompt(history: str, candidates: list[dict], era_hints: list = None, serialization_format: int = 3) -> str:
     """
     Build the prompt for Qwen reranking.
     Each candidate should have:
@@ -20,6 +20,8 @@ def build_rerank_prompt(history: str, candidates: list[dict], era_hints: list = 
     - title
     - genre
     - decade
+    - year (optional)
+    - director (optional)
     """
     history = truncate_history(history, max_turns=5)
     candidate_lines = []
@@ -28,14 +30,24 @@ def build_rerank_prompt(history: str, candidates: list[dict], era_hints: list = 
         year = c.get('year', None)
         genre = c.get('genre', 'Unknown')
         decade = c.get('decade', 'Unknown')
+        director = c.get('director', None)
         
-        title_part = f"{title} ({year})" if year else title
+        if serialization_format == 1:
+            title_part = title
+        else:
+            title_part = f"{title} ({year})" if year else title
+            
         parts = [title_part]
         
-        if genre and genre != 'Unknown':
-            parts.append(genre)
-        if decade and decade != 'Unknown':
-            parts.append(decade)
+        if serialization_format >= 3:
+            if genre and genre != 'Unknown':
+                parts.append(genre)
+            if decade and decade != 'Unknown':
+                parts.append(decade)
+                
+        if serialization_format >= 4:
+            if director and director != 'Unknown':
+                parts.append(director)
         
         candidate_lines.append(
             f"{i+1}. {' | '.join(parts)}"
