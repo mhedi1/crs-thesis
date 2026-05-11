@@ -11,6 +11,25 @@ from fuzzywuzzy import fuzz
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+def extract_year_from_uri(uri: str) -> str:
+    """
+    Extract year from DBpedia URI.
+    Examples:
+    It_(2017_film) -> '2017'
+    Scream_(1996_film) -> '1996'
+    The_Conjuring -> None
+    """
+    import re
+    if not uri:
+        return None
+    match = re.search(r'_\((\d{4})_film\)', uri)
+    if match:
+        return match.group(1)
+    match = re.search(r'_\((\d{4})\)', uri)
+    if match:
+        return match.group(1)
+    return None
+
 GENRE_KEYWORDS = {
     "Horror": ["horror", "scary", "ghost", "zombie", "vampire", "slasher", "haunting", "exorcist", "amityville"],
     "Comedy": ["comedy", "funny", "humor", "laugh"],
@@ -344,12 +363,15 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
             
         year = _extract_year(entity_uri)
         
+        uri_string = _id2entity.get(movie_id, '')
         c = {
             "id": int(movie_id),
             "title": title,
             "genre": _infer_genre(entity_uri, title),
             "decade": _year_to_decade(year),
-            "source": "KBRD_NEURAL"
+            "source": "KBRD_NEURAL",
+            "uri": uri_string,
+            "year": extract_year_from_uri(uri_string)
         }
         candidates.append(c)
         

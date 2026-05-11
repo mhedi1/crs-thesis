@@ -24,13 +24,19 @@ def build_rerank_prompt(history: str, candidates: list[dict], era_hints: list = 
     history = truncate_history(history, max_turns=5)
     candidate_lines = []
     for i, c in enumerate(candidates):
-        parts = [c['title']]
+        title = c['title']
+        year = c.get('year', None)
         genre = c.get('genre', 'Unknown')
         decade = c.get('decade', 'Unknown')
+        
+        title_part = f"{title} ({year})" if year else title
+        parts = [title_part]
+        
         if genre and genre != 'Unknown':
             parts.append(genre)
         if decade and decade != 'Unknown':
             parts.append(decade)
+        
         candidate_lines.append(
             f"{i+1}. {' | '.join(parts)}"
         )
