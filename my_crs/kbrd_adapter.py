@@ -1,5 +1,6 @@
 import os
 import pickle
+import json
 import re
 import difflib
 import spacy
@@ -69,6 +70,31 @@ KBRD_REPO_PATH = os.path.normpath(
     os.path.join(CURRENT_DIR, "..", "baseline_repo", "KBRD_project", "KBRD")
 )
 
+GENRE_CACHE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))),
+    'experiments', 'improved_ekg', 'genre_cache.json'
+)
+
+_genre_cache = {}
+
+def _load_genre_cache():
+    global _genre_cache
+    if _genre_cache:
+        return
+    if os.path.exists(GENRE_CACHE_PATH):
+        with open(GENRE_CACHE_PATH, 'r') as f:
+            _genre_cache = json.load(f)
+        logger.info(
+            f"[KBRD Adapter] Loaded genre cache: "
+            f"{len(_genre_cache)} entries"
+        )
+    else:
+        logger.warning(
+            "[KBRD Adapter] Genre cache not found. "
+            "Genre will be Unknown for all candidates."
+        )
+
 _data_loaded = False
 _has_error = False
 _id2entity = None
@@ -120,6 +146,7 @@ def _load_kbrd_resources() -> None:
         _data_loaded = True
 
         logger.info(f"[KBRD Adapter] Loaded {len(_id2entity)} entities and {len(_movie_ids)} movie ids.")
+        _load_genre_cache()
 
     except Exception as e:
         logger.error(f"[KBRD Adapter ERROR] Could not load KBRD resources: {e}")
@@ -258,6 +285,24 @@ def _load_kbrd_model():
         _has_error = True
 
 
+def _enrich_candidate(candidate):
+    eid = str(candidate.get('id', ''))
+    if eid in _genre_cache:
+        entry = _genre_cache[eid]
+        genres_clean = entry.get('genres_clean', [])
+        if genres_clean and \
+           candidate.get('genre', 'Unknown') == 'Unknown':
+            candidate['genre'] = ', '.join(genres_clean)
+        if entry.get('directors') and \
+           not candidate.get('director'):
+            candidate['director'] = \
+                entry['directors'][0]
+        if entry.get('year') and \
+           not candidate.get('year'):
+            candidate['year'] = str(entry['year'])
+    return candidate
+
+
 def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
     logger.info(f"\n{'=' * 50}")
     logger.info("[KBRD Neural] Starting Neural KBRD Candidate Generation")
@@ -373,6 +418,7 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
             "uri": uri_string,
             "year": extract_year_from_uri(uri_string)
         }
+        c = _enrich_candidate(c)
         candidates.append(c)
         
         if len(candidates) == 1:
