@@ -142,10 +142,12 @@ def evaluate(args):
             print(f"INSPIRED dataset not found at {data_path}.\nPlease download it first.")
             return
 
+    mode_label = "recommendation only" if args.recommendation_only else "full recommendation + response evaluation"
     print(f"\n{'='*60}")
     print(f"EVALUATION — {args.dataset.upper()} Test Set (Turn-by-Turn)")
     print(f"Format: {args.format}")
     print(f"Max conversations: {args.max_samples}")
+    print(f"Mode: {mode_label}")
     print(f"{'='*60}\n")
 
     scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
@@ -195,27 +197,28 @@ def evaluate(args):
                                 )
                                 reranker_hits.append(reranker_hit)
 
-                                response = generate_response(dialogue_up_to, selected_movie)
-                                generated_responses.append(response)
+                                if not args.recommendation_only:
+                                    response = generate_response(dialogue_up_to, selected_movie)
+                                    generated_responses.append(response)
 
-                                movie_mentions = sample.get("movieMentions", {})
-                                ref_text = msg.get("text", "").strip()
-                                for movie_id, movie_name in movie_mentions.items():
-                                    ref_text = ref_text.replace(f"@{movie_id}", movie_name.strip())
-                                ref_text = ref_text.replace("&quot;", '"').replace("&amp;", "&")
-                                reference_responses.append(ref_text)
+                                    movie_mentions = sample.get("movieMentions", {})
+                                    ref_text = msg.get("text", "").strip()
+                                    for movie_id, movie_name in movie_mentions.items():
+                                        ref_text = ref_text.replace(f"@{movie_id}", movie_name.strip())
+                                    ref_text = ref_text.replace("&quot;", '"').replace("&amp;", "&")
+                                    reference_responses.append(ref_text)
 
-                                response_lengths.append(len(nltk.word_tokenize(response)))
+                                    response_lengths.append(len(nltk.word_tokenize(response)))
 
-                                ref_tokens = [nltk.word_tokenize(ref_text.lower())]
-                                gen_tokens = nltk.word_tokenize(response.lower())
-                                bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=smooth_fn)
-                                bleu_scores.append(bleu)
+                                    ref_tokens = [nltk.word_tokenize(ref_text.lower())]
+                                    gen_tokens = nltk.word_tokenize(response.lower())
+                                    bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=smooth_fn)
+                                    bleu_scores.append(bleu)
 
-                                r_scores = scorer.score(ref_text, response)
-                                rouge_scores['rouge1'].append(r_scores['rouge1'].fmeasure)
-                                rouge_scores['rouge2'].append(r_scores['rouge2'].fmeasure)
-                                rouge_scores['rougeL'].append(r_scores['rougeL'].fmeasure)
+                                    r_scores = scorer.score(ref_text, response)
+                                    rouge_scores['rouge1'].append(r_scores['rouge1'].fmeasure)
+                                    rouge_scores['rouge2'].append(r_scores['rouge2'].fmeasure)
+                                    rouge_scores['rougeL'].append(r_scores['rougeL'].fmeasure)
 
                                 total_evaluation_instances += 1
                                 conversation_has_instances = True
@@ -243,6 +246,7 @@ def evaluate(args):
     final_metrics = {
         "dataset": args.dataset,
         "format": args.format,
+        "recommendation_only": args.recommendation_only,
         "conversations": total_conversations_processed,
         "instances": total_evaluation_instances,
         "skipped_conversations": skipped_conversations,
@@ -256,16 +260,16 @@ def evaluate(args):
             final_metrics["recommendation"][f"Recall@{k}"] = sum(hits[k]) / len(hits[k])
         final_metrics["recommendation"]["MRR"] = sum(mrrs) / len(mrrs)
         final_metrics["recommendation"]["Reranker@1"] = sum(reranker_hits) / len(reranker_hits) if reranker_hits else 0.0
-        
-        final_metrics["conversation"]["Distinct-2"] = calculate_distinct_n(generated_responses, 2)
-        final_metrics["conversation"]["Distinct-3"] = calculate_distinct_n(generated_responses, 3)
-        final_metrics["conversation"]["Distinct-4"] = calculate_distinct_n(generated_responses, 4)
-        
-        final_metrics["conversation"]["BLEU"] = sum(bleu_scores) / len(bleu_scores)
-        final_metrics["conversation"]["ROUGE-1"] = sum(rouge_scores['rouge1']) / len(rouge_scores['rouge1'])
-        final_metrics["conversation"]["ROUGE-2"] = sum(rouge_scores['rouge2']) / len(rouge_scores['rouge2'])
-        final_metrics["conversation"]["ROUGE-L"] = sum(rouge_scores['rougeL']) / len(rouge_scores['rougeL'])
-        final_metrics["conversation"]["Avg_Length"] = sum(response_lengths) / len(response_lengths)
+
+        if not args.recommendation_only:
+            final_metrics["conversation"]["Distinct-2"] = calculate_distinct_n(generated_responses, 2)
+            final_metrics["conversation"]["Distinct-3"] = calculate_distinct_n(generated_responses, 3)
+            final_metrics["conversation"]["Distinct-4"] = calculate_distinct_n(generated_responses, 4)
+            final_metrics["conversation"]["BLEU"] = sum(bleu_scores) / len(bleu_scores)
+            final_metrics["conversation"]["ROUGE-1"] = sum(rouge_scores['rouge1']) / len(rouge_scores['rouge1'])
+            final_metrics["conversation"]["ROUGE-2"] = sum(rouge_scores['rouge2']) / len(rouge_scores['rouge2'])
+            final_metrics["conversation"]["ROUGE-L"] = sum(rouge_scores['rougeL']) / len(rouge_scores['rougeL'])
+            final_metrics["conversation"]["Avg_Length"] = sum(response_lengths) / len(response_lengths)
 
     # Print summary table
     print(f"\n{'='*60}")
@@ -282,15 +286,16 @@ def evaluate(args):
         print(f"  MRR:         {final_metrics['recommendation']['MRR']:.4f}")
         print(f"  Reranker@1:  {final_metrics['recommendation']['Reranker@1']:.4f}\n")
         
-        print("Conversation Metrics:")
-        print(f"  Distinct-2: {final_metrics['conversation']['Distinct-2']:.4f}")
-        print(f"  Distinct-3: {final_metrics['conversation']['Distinct-3']:.4f}")
-        print(f"  Distinct-4: {final_metrics['conversation']['Distinct-4']:.4f}")
-        print(f"  BLEU:       {final_metrics['conversation']['BLEU']:.4f}")
-        print(f"  ROUGE-1:    {final_metrics['conversation']['ROUGE-1']:.4f}")
-        print(f"  ROUGE-2:    {final_metrics['conversation']['ROUGE-2']:.4f}")
-        print(f"  ROUGE-L:    {final_metrics['conversation']['ROUGE-L']:.4f}")
-        print(f"  Avg Length: {final_metrics['conversation']['Avg_Length']:.2f} words\n")
+        if not args.recommendation_only:
+            print("Conversation Metrics:")
+            print(f"  Distinct-2: {final_metrics['conversation']['Distinct-2']:.4f}")
+            print(f"  Distinct-3: {final_metrics['conversation']['Distinct-3']:.4f}")
+            print(f"  Distinct-4: {final_metrics['conversation']['Distinct-4']:.4f}")
+            print(f"  BLEU:       {final_metrics['conversation']['BLEU']:.4f}")
+            print(f"  ROUGE-1:    {final_metrics['conversation']['ROUGE-1']:.4f}")
+            print(f"  ROUGE-2:    {final_metrics['conversation']['ROUGE-2']:.4f}")
+            print(f"  ROUGE-L:    {final_metrics['conversation']['ROUGE-L']:.4f}")
+            print(f"  Avg Length: {final_metrics['conversation']['Avg_Length']:.2f} words\n")
 
     # Save results
     results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments")
@@ -316,6 +321,8 @@ if __name__ == "__main__":
                         help="Dataset choice (redial or inspired)")
     parser.add_argument("--max_samples", type=int, default=200,
                         help="Max conversations to process")
-    
+    parser.add_argument("--recommendation_only", action="store_true", default=False,
+                        help="Skip response generation; compute only recommendation metrics")
+
     args = parser.parse_args()
     evaluate(args)
