@@ -6,3 +6,8 @@ __pycache__/
 *.log
 .env
 mlruns/
+.claude/
+papers/
+experiments/eval_format*_redial.json
+*.zip
+

@@ -264,19 +264,25 @@ def _load_kbrd_model():
 
     try:
         import sys
+        import torch
         if KBRD_REPO_PATH not in sys.path:
             sys.path.insert(0, KBRD_REPO_PATH)
-            
+
         from parlai.core.agents import create_agent
-        
+
+        no_cuda = not torch.cuda.is_available()
+        if no_cuda:
+            logger.info("[KBRD Neural] CUDA not available — loading model on CPU")
         logger.info("[KBRD Neural] Loading model from saved/kbrd_model")
         opt = {
             'model_file': os.path.join(KBRD_REPO_PATH, 'saved', 'kbrd_model'),
             'datatype': 'test',
             'datapath': os.path.join(KBRD_REPO_PATH, 'data'),
+            'no_cuda': no_cuda,
             'override': {
                 'model_file': os.path.join(KBRD_REPO_PATH, 'saved', 'kbrd_model'),
                 'datapath': os.path.join(KBRD_REPO_PATH, 'data'),
+                'no_cuda': no_cuda,
             }
         }
         _kbrd_agent = create_agent(opt, requireModelExists=True)
@@ -372,9 +378,10 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
     logger.info("[KBRD Neural] Running inference...")
     
     import torch
+    use_cuda = getattr(_kbrd_agent, 'use_cuda', False) and torch.cuda.is_available()
     seed_sets = [seed_list]
     labels = torch.zeros(1, dtype=torch.long)
-    if _kbrd_agent.use_cuda:
+    if use_cuda:
         labels = labels.cuda()
 
     with torch.no_grad():

@@ -8,8 +8,12 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 from collections import defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, r"C:\Users\mhfou\Desktop\thesis_crs\baseline_repo\KBRD_project\KBRD")
+_MY_CRS_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_MY_CRS_DIR)
+_KBRD_PATH = os.path.join(_PROJECT_ROOT, "baseline_repo", "KBRD_project", "KBRD")
+
+sys.path.insert(0, _MY_CRS_DIR)
+sys.path.insert(0, _KBRD_PATH)
 
 from kbrd_adapter import get_kbrd_candidates
 from reranker import rerank
@@ -134,10 +138,10 @@ def evaluate(args):
     skipped_conversations = 0
 
     if args.dataset == 'redial':
-        data_path = r"C:\Users\mhfou\Desktop\thesis_crs\baseline_repo\KBRD_project\KBRD\data\redial\test_data.jsonl"
+        data_path = os.path.join(_PROJECT_ROOT, "baseline_repo", "KBRD_project", "KBRD",
+                                 "data", "redial", "test_data.jsonl")
     else:
-        # Placeholder for inspired
-        data_path = r"C:\Users\mhfou\Desktop\thesis_crs\data\inspired\test_data.jsonl"
+        data_path = os.path.join(_PROJECT_ROOT, "data", "inspired", "test_data.jsonl")
         if not os.path.exists(data_path):
             print(f"INSPIRED dataset not found at {data_path}.\nPlease download it first.")
             return
