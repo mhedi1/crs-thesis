@@ -629,10 +629,6 @@ def prepare_input(dialogue: str) -> tuple:
         (r'\b70s\b|seventies', '1970s'),
         (r'\b80s\b|eighties', '1980s'),
         (r'\b90s\b|nineties', '1990s'),
-        (r'\bclassic\b|\bvintage\b|\bold\b|\bolder\b', 
-         '1970s'),
-        (r'\bmodern\b|\brecent\b|\bnew\b|\blatest\b',
-         '2010s'),
     ]
 
     dialogue_lower = dialogue.lower()

@@ -16,38 +16,31 @@ from reranker import rerank
 from response_generator import generate_response
 
 def normalize_title(title: str) -> str:
-    """Clean title for comparison."""
+    """Normalize title: strip year, punctuation, collapse whitespace, lowercase."""
     title = re.sub(r'\(\d{4}\)', '', title)
     title = re.sub(r'[^\w\s]', '', title)
+    title = re.sub(r'\s+', ' ', title)
     return title.lower().strip()
 
-def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
-    """Check if any ground truth movie is in top-k candidates."""
-    top_k = candidates[:k]
-    top_k_normalized = [normalize_title(c["title"]) for c in top_k]
+def strict_title_match(title_a: str, title_b: str) -> bool:
+    """Exact match after normalization. No substring matching."""
+    return normalize_title(title_a) == normalize_title(title_b)
 
-    for gt_movie in ground_truth:
-        gt_normalized = normalize_title(gt_movie)
-        if len(gt_normalized) < 3:
-            continue
-        for candidate_title in top_k_normalized:
-            if gt_normalized in candidate_title or candidate_title in gt_normalized:
-                if len(gt_normalized) > 4:
-                    return True
+def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
+    """Check if any ground truth movie exactly matches any of top-k candidates."""
+    top_k = candidates[:k]
+    for c in top_k:
+        for gt_movie in ground_truth:
+            if strict_title_match(c["title"], gt_movie):
+                return True
     return False
 
 def get_rank(candidates: list, ground_truth: list) -> int:
-    """Returns the rank (1-indexed) of the first hit, or 0 if no hit."""
-    candidates_normalized = [normalize_title(c["title"]) for c in candidates]
-    
-    for rank, candidate_title in enumerate(candidates_normalized, 1):
+    """Returns the rank (1-indexed) of the first exact hit, or 0 if no hit."""
+    for rank, c in enumerate(candidates, 1):
         for gt_movie in ground_truth:
-            gt_normalized = normalize_title(gt_movie)
-            if len(gt_normalized) < 3:
-                continue
-            if gt_normalized in candidate_title or candidate_title in gt_normalized:
-                if len(gt_normalized) > 4:
-                    return rank
+            if strict_title_match(c["title"], gt_movie):
+                return rank
     return 0
 
 def build_dialogue_up_to(sample: dict, turn_index: int) -> str:
@@ -129,13 +122,16 @@ def evaluate(args):
     k_values = [1, 10, 50]
     hits = {k: [] for k in k_values}
     mrrs = []
-    
+    reranker_hits = []
+
     generated_responses = []
     reference_responses = []
     response_lengths = []
-    
+
     total_conversations_processed = 0
     total_evaluation_instances = 0
+    skipped_instances = 0
+    skipped_conversations = 0
 
     if args.dataset == 'redial':
         data_path = r"C:\Users\mhfou\Desktop\thesis_crs\baseline_repo\KBRD_project\KBRD\data\redial\test_data.jsonl"
@@ -177,62 +173,70 @@ def evaluate(args):
                         recommended_movies = get_recommended_movies_at_turn(sample, turn_index)
                         
                         if recommended_movies:
-                            # Evaluation instance
-                            dialogue_up_to = build_dialogue_up_to(sample, turn_index)
-                            
-                            candidates, detected_decades = get_kbrd_candidates(dialogue_up_to, top_k=50)
-                            
-                            for k in k_values:
-                                hit = is_hit(candidates, recommended_movies, k)
-                                hits[k].append(hit)
-                            
-                            rank = get_rank(candidates, recommended_movies)
-                            mrr = 1.0 / rank if rank > 0 else 0.0
-                            mrrs.append(mrr)
+                            try:
+                                # Evaluation instance
+                                dialogue_up_to = build_dialogue_up_to(sample, turn_index)
 
-                            selected_movie = rerank(dialogue_up_to, candidates, era_hints=detected_decades, serialization_format=args.format)
-                            
-                            response = generate_response(dialogue_up_to, selected_movie)
-                            generated_responses.append(response)
-                            
-                            # Get reference response
-                            # Resolve movie mentions in reference response
-                            movie_mentions = sample.get("movieMentions", {})
-                            ref_text = msg.get("text", "").strip()
-                            for movie_id, movie_name in movie_mentions.items():
-                                ref_text = ref_text.replace(f"@{movie_id}", movie_name.strip())
-                            ref_text = ref_text.replace("&quot;", '"').replace("&amp;", "&")
-                            reference_responses.append(ref_text)
-                            
-                            response_lengths.append(len(nltk.word_tokenize(response)))
-                            
-                            # BLEU
-                            ref_tokens = [nltk.word_tokenize(ref_text.lower())]
-                            gen_tokens = nltk.word_tokenize(response.lower())
-                            bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=smooth_fn)
-                            bleu_scores.append(bleu)
-                            
-                            # ROUGE
-                            r_scores = scorer.score(ref_text, response)
-                            rouge_scores['rouge1'].append(r_scores['rouge1'].fmeasure)
-                            rouge_scores['rouge2'].append(r_scores['rouge2'].fmeasure)
-                            rouge_scores['rougeL'].append(r_scores['rougeL'].fmeasure)
+                                candidates, detected_decades = get_kbrd_candidates(dialogue_up_to, top_k=50)
 
-                            total_evaluation_instances += 1
-                            conversation_has_instances = True
-                            
-                            if total_evaluation_instances % 10 == 0:
-                                r1 = sum(hits[1]) / len(hits[1]) if hits[1] else 0
-                                r10 = sum(hits[10]) / len(hits[10]) if hits[10] else 0
-                                r50 = sum(hits[50]) / len(hits[50]) if hits[50] else 0
-                                print(f"[{total_evaluation_instances} instances] "
-                                      f"R@1={r1:.4f} R@10={r10:.4f} R@50={r50:.4f}")
+                                for k in k_values:
+                                    hit = is_hit(candidates, recommended_movies, k)
+                                    hits[k].append(hit)
+
+                                rank = get_rank(candidates, recommended_movies)
+                                mrr = 1.0 / rank if rank > 0 else 0.0
+                                mrrs.append(mrr)
+
+                                selected_movie = rerank(dialogue_up_to, candidates, era_hints=detected_decades, serialization_format=args.format)
+
+                                reranker_hit = any(
+                                    strict_title_match(selected_movie["title"], gt)
+                                    for gt in recommended_movies
+                                )
+                                reranker_hits.append(reranker_hit)
+
+                                response = generate_response(dialogue_up_to, selected_movie)
+                                generated_responses.append(response)
+
+                                movie_mentions = sample.get("movieMentions", {})
+                                ref_text = msg.get("text", "").strip()
+                                for movie_id, movie_name in movie_mentions.items():
+                                    ref_text = ref_text.replace(f"@{movie_id}", movie_name.strip())
+                                ref_text = ref_text.replace("&quot;", '"').replace("&amp;", "&")
+                                reference_responses.append(ref_text)
+
+                                response_lengths.append(len(nltk.word_tokenize(response)))
+
+                                ref_tokens = [nltk.word_tokenize(ref_text.lower())]
+                                gen_tokens = nltk.word_tokenize(response.lower())
+                                bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=smooth_fn)
+                                bleu_scores.append(bleu)
+
+                                r_scores = scorer.score(ref_text, response)
+                                rouge_scores['rouge1'].append(r_scores['rouge1'].fmeasure)
+                                rouge_scores['rouge2'].append(r_scores['rouge2'].fmeasure)
+                                rouge_scores['rougeL'].append(r_scores['rougeL'].fmeasure)
+
+                                total_evaluation_instances += 1
+                                conversation_has_instances = True
+
+                                if total_evaluation_instances % 10 == 0:
+                                    r1 = sum(hits[1]) / len(hits[1]) if hits[1] else 0
+                                    r10 = sum(hits[10]) / len(hits[10]) if hits[10] else 0
+                                    r50 = sum(hits[50]) / len(hits[50]) if hits[50] else 0
+                                    print(f"[{total_evaluation_instances} instances] "
+                                          f"R@1={r1:.4f} R@10={r10:.4f} R@50={r50:.4f}")
+
+                            except Exception as e:
+                                print(f"[SKIP] Instance error (conv turn {turn_index}): {e}")
+                                skipped_instances += 1
                                       
                 if conversation_has_instances:
                     total_conversations_processed += 1
                     
             except Exception as e:
-                # print(f"Error: {e}")
+                print(f"[SKIP] Conversation error: {e}")
+                skipped_conversations += 1
                 continue
 
     # Calculate final metrics
@@ -241,6 +245,8 @@ def evaluate(args):
         "format": args.format,
         "conversations": total_conversations_processed,
         "instances": total_evaluation_instances,
+        "skipped_conversations": skipped_conversations,
+        "skipped_instances": skipped_instances,
         "recommendation": {},
         "conversation": {}
     }
@@ -249,6 +255,7 @@ def evaluate(args):
         for k in k_values:
             final_metrics["recommendation"][f"Recall@{k}"] = sum(hits[k]) / len(hits[k])
         final_metrics["recommendation"]["MRR"] = sum(mrrs) / len(mrrs)
+        final_metrics["recommendation"]["Reranker@1"] = sum(reranker_hits) / len(reranker_hits) if reranker_hits else 0.0
         
         final_metrics["conversation"]["Distinct-2"] = calculate_distinct_n(generated_responses, 2)
         final_metrics["conversation"]["Distinct-3"] = calculate_distinct_n(generated_responses, 3)
@@ -269,10 +276,11 @@ def evaluate(args):
     
     if total_evaluation_instances > 0:
         print("Recommendation Metrics:")
-        print(f"  Recall@1:  {final_metrics['recommendation']['Recall@1']:.4f}")
-        print(f"  Recall@10: {final_metrics['recommendation']['Recall@10']:.4f}")
-        print(f"  Recall@50: {final_metrics['recommendation']['Recall@50']:.4f}")
-        print(f"  MRR:       {final_metrics['recommendation']['MRR']:.4f}\n")
+        print(f"  Recall@1:    {final_metrics['recommendation']['Recall@1']:.4f}")
+        print(f"  Recall@10:   {final_metrics['recommendation']['Recall@10']:.4f}")
+        print(f"  Recall@50:   {final_metrics['recommendation']['Recall@50']:.4f}")
+        print(f"  MRR:         {final_metrics['recommendation']['MRR']:.4f}")
+        print(f"  Reranker@1:  {final_metrics['recommendation']['Reranker@1']:.4f}\n")
         
         print("Conversation Metrics:")
         print(f"  Distinct-2: {final_metrics['conversation']['Distinct-2']:.4f}")
@@ -292,6 +300,9 @@ def evaluate(args):
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(final_metrics, f, indent=4)
 
+    print(f"Skip Report:")
+    print(f"  Skipped conversations: {skipped_conversations}")
+    print(f"  Skipped instances:     {skipped_instances}")
     print(f"{'='*60}")
     print(f"Results saved to experiments/eval_format{args.format}_{args.dataset}.json")
     print(f"{'='*60}")

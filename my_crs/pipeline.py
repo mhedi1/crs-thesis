@@ -6,7 +6,7 @@ from response_generator import generate_response
 
 def run_case(title: str, history: str, top_k: int = 5, use_kbrd: bool = False) -> None:
     if use_kbrd:
-        candidates = get_kbrd_candidates(history, top_k=top_k)
+        candidates, _ = get_kbrd_candidates(history, top_k=top_k)
         stage1_name = "KBRD Adapter"
     else:
         candidates = generate_candidates(history, top_k=top_k)
