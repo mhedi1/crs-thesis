@@ -2,21 +2,24 @@ import json
 import re
 import sys
 import os
+import argparse
+import nltk
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from rouge_score import rouge_scorer
+from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, r"C:\Users\mhfou\Desktop\thesis_crs\baseline_repo\KBRD_project\KBRD")
 
 from kbrd_adapter import get_kbrd_candidates
-
-TEST_DATA_PATH = r"C:\Users\mhfou\Desktop\thesis_crs\baseline_repo\KBRD_project\KBRD\data\redial\test_data.jsonl"
-
+from reranker import rerank
+from response_generator import generate_response
 
 def normalize_title(title: str) -> str:
     """Clean title for comparison."""
     title = re.sub(r'\(\d{4}\)', '', title)
     title = re.sub(r'[^\w\s]', '', title)
     return title.lower().strip()
-
 
 def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
     """Check if any ground truth movie is in top-k candidates."""
@@ -33,6 +36,19 @@ def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
                     return True
     return False
 
+def get_rank(candidates: list, ground_truth: list) -> int:
+    """Returns the rank (1-indexed) of the first hit, or 0 if no hit."""
+    candidates_normalized = [normalize_title(c["title"]) for c in candidates]
+    
+    for rank, candidate_title in enumerate(candidates_normalized, 1):
+        for gt_movie in ground_truth:
+            gt_normalized = normalize_title(gt_movie)
+            if len(gt_normalized) < 3:
+                continue
+            if gt_normalized in candidate_title or candidate_title in gt_normalized:
+                if len(gt_normalized) > 4:
+                    return rank
+    return 0
 
 def build_dialogue_up_to(sample: dict, turn_index: int) -> str:
     """
@@ -62,7 +78,6 @@ def build_dialogue_up_to(sample: dict, turn_index: int) -> str:
 
     return "\n".join(turns)
 
-
 def get_recommended_movies_at_turn(sample: dict, turn_index: int) -> list:
     """
     Looks at the message at turn_index.
@@ -90,22 +105,61 @@ def get_recommended_movies_at_turn(sample: dict, turn_index: int) -> list:
                 
     return recommended_movies
 
+def calculate_distinct_n(responses: list, n: int) -> float:
+    """Calculate Distinct-N for a list of responses."""
+    if not responses:
+        return 0.0
+    
+    unique_ngrams = set()
+    total_ngrams = 0
+    
+    for response in responses:
+        tokens = nltk.word_tokenize(response.lower())
+        if len(tokens) < n:
+            continue
+        ngrams = list(nltk.ngrams(tokens, n))
+        unique_ngrams.update(ngrams)
+        total_ngrams += len(ngrams)
+        
+    if total_ngrams == 0:
+        return 0.0
+    return len(unique_ngrams) / total_ngrams
 
-def evaluate(max_samples: int = 200):
+def evaluate(args):
     k_values = [1, 10, 50]
     hits = {k: [] for k in k_values}
+    mrrs = []
+    
+    generated_responses = []
+    reference_responses = []
+    response_lengths = []
     
     total_conversations_processed = 0
     total_evaluation_instances = 0
 
+    if args.dataset == 'redial':
+        data_path = r"C:\Users\mhfou\Desktop\thesis_crs\baseline_repo\KBRD_project\KBRD\data\redial\test_data.jsonl"
+    else:
+        # Placeholder for inspired
+        data_path = r"C:\Users\mhfou\Desktop\thesis_crs\data\inspired\test_data.jsonl"
+        if not os.path.exists(data_path):
+            print(f"INSPIRED dataset not found at {data_path}.\nPlease download it first.")
+            return
+
     print(f"\n{'='*60}")
-    print(f"EVALUATION — ReDial Test Set (Turn-by-Turn)")
-    print(f"Max conversations to process: {max_samples}")
+    print(f"EVALUATION — {args.dataset.upper()} Test Set (Turn-by-Turn)")
+    print(f"Format: {args.format}")
+    print(f"Max conversations: {args.max_samples}")
     print(f"{'='*60}\n")
 
-    with open(TEST_DATA_PATH, "r", encoding="utf-8") as f:
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+    rouge_scores = defaultdict(list)
+    bleu_scores = []
+    smooth_fn = SmoothingFunction().method1
+
+    with open(data_path, "r", encoding="utf-8") as f:
         for line in f:
-            if total_conversations_processed >= max_samples:
+            if total_conversations_processed >= args.max_samples:
                 break
                 
             try:
@@ -126,16 +180,48 @@ def evaluate(max_samples: int = 200):
                             # Evaluation instance
                             dialogue_up_to = build_dialogue_up_to(sample, turn_index)
                             
-                            candidates = get_kbrd_candidates(dialogue_up_to, top_k=50)
+                            candidates, detected_decades = get_kbrd_candidates(dialogue_up_to, top_k=50)
                             
                             for k in k_values:
                                 hit = is_hit(candidates, recommended_movies, k)
                                 hits[k].append(hit)
-                                
+                            
+                            rank = get_rank(candidates, recommended_movies)
+                            mrr = 1.0 / rank if rank > 0 else 0.0
+                            mrrs.append(mrr)
+
+                            selected_movie = rerank(dialogue_up_to, candidates, era_hints=detected_decades, serialization_format=args.format)
+                            
+                            response = generate_response(dialogue_up_to, selected_movie)
+                            generated_responses.append(response)
+                            
+                            # Get reference response
+                            # Resolve movie mentions in reference response
+                            movie_mentions = sample.get("movieMentions", {})
+                            ref_text = msg.get("text", "").strip()
+                            for movie_id, movie_name in movie_mentions.items():
+                                ref_text = ref_text.replace(f"@{movie_id}", movie_name.strip())
+                            ref_text = ref_text.replace("&quot;", '"').replace("&amp;", "&")
+                            reference_responses.append(ref_text)
+                            
+                            response_lengths.append(len(nltk.word_tokenize(response)))
+                            
+                            # BLEU
+                            ref_tokens = [nltk.word_tokenize(ref_text.lower())]
+                            gen_tokens = nltk.word_tokenize(response.lower())
+                            bleu = sentence_bleu(ref_tokens, gen_tokens, smoothing_function=smooth_fn)
+                            bleu_scores.append(bleu)
+                            
+                            # ROUGE
+                            r_scores = scorer.score(ref_text, response)
+                            rouge_scores['rouge1'].append(r_scores['rouge1'].fmeasure)
+                            rouge_scores['rouge2'].append(r_scores['rouge2'].fmeasure)
+                            rouge_scores['rougeL'].append(r_scores['rougeL'].fmeasure)
+
                             total_evaluation_instances += 1
                             conversation_has_instances = True
                             
-                            if total_evaluation_instances % 20 == 0:
+                            if total_evaluation_instances % 10 == 0:
                                 r1 = sum(hits[1]) / len(hits[1]) if hits[1] else 0
                                 r10 = sum(hits[10]) / len(hits[10]) if hits[10] else 0
                                 r50 = sum(hits[50]) / len(hits[50]) if hits[50] else 0
@@ -149,54 +235,76 @@ def evaluate(max_samples: int = 200):
                 # print(f"Error: {e}")
                 continue
 
-    # Final Results
+    # Calculate final metrics
+    final_metrics = {
+        "dataset": args.dataset,
+        "format": args.format,
+        "conversations": total_conversations_processed,
+        "instances": total_evaluation_instances,
+        "recommendation": {},
+        "conversation": {}
+    }
+    
+    if total_evaluation_instances > 0:
+        for k in k_values:
+            final_metrics["recommendation"][f"Recall@{k}"] = sum(hits[k]) / len(hits[k])
+        final_metrics["recommendation"]["MRR"] = sum(mrrs) / len(mrrs)
+        
+        final_metrics["conversation"]["Distinct-2"] = calculate_distinct_n(generated_responses, 2)
+        final_metrics["conversation"]["Distinct-3"] = calculate_distinct_n(generated_responses, 3)
+        final_metrics["conversation"]["Distinct-4"] = calculate_distinct_n(generated_responses, 4)
+        
+        final_metrics["conversation"]["BLEU"] = sum(bleu_scores) / len(bleu_scores)
+        final_metrics["conversation"]["ROUGE-1"] = sum(rouge_scores['rouge1']) / len(rouge_scores['rouge1'])
+        final_metrics["conversation"]["ROUGE-2"] = sum(rouge_scores['rouge2']) / len(rouge_scores['rouge2'])
+        final_metrics["conversation"]["ROUGE-L"] = sum(rouge_scores['rougeL']) / len(rouge_scores['rougeL'])
+        final_metrics["conversation"]["Avg_Length"] = sum(response_lengths) / len(response_lengths)
+
+    # Print summary table
     print(f"\n{'='*60}")
     print(f"FINAL RESULTS")
     print(f"{'='*60}")
     print(f"Total conversations processed: {total_conversations_processed}")
-    print(f"Total evaluation instances: {total_evaluation_instances}")
-    print()
+    print(f"Total evaluation instances: {total_evaluation_instances}\n")
     
-    final_recalls = {}
-    for k in k_values:
-        if hits[k]:
-            recall = sum(hits[k]) / len(hits[k])
-            final_recalls[k] = recall
-            print(f"Recall@{k:<3}: {recall:.4f}  "
-                  f"({sum(hits[k])}/{len(hits[k])} instances)")
-                  
-    print(f"{'='*60}\n")
-    
-    # Save results
-    results_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..", "experiments", "evaluation_turn_by_turn.txt"
-    )
-    os.makedirs(os.path.dirname(results_path), exist_ok=True)
-    with open(results_path, "w", encoding="utf-8") as f:
-        f.write("KBRD + Qwen Turn-by-Turn Evaluation Results\n")
-        f.write(f"Dataset: ReDial test set\n")
-        f.write(f"Conversations: {total_conversations_processed}\n")
-        f.write(f"Instances: {total_evaluation_instances}\n\n")
-        for k in k_values:
-            if hits[k]:
-                f.write(f"Recall@{k}: {final_recalls[k]:.4f}\n")
+    if total_evaluation_instances > 0:
+        print("Recommendation Metrics:")
+        print(f"  Recall@1:  {final_metrics['recommendation']['Recall@1']:.4f}")
+        print(f"  Recall@10: {final_metrics['recommendation']['Recall@10']:.4f}")
+        print(f"  Recall@50: {final_metrics['recommendation']['Recall@50']:.4f}")
+        print(f"  MRR:       {final_metrics['recommendation']['MRR']:.4f}\n")
+        
+        print("Conversation Metrics:")
+        print(f"  Distinct-2: {final_metrics['conversation']['Distinct-2']:.4f}")
+        print(f"  Distinct-3: {final_metrics['conversation']['Distinct-3']:.4f}")
+        print(f"  Distinct-4: {final_metrics['conversation']['Distinct-4']:.4f}")
+        print(f"  BLEU:       {final_metrics['conversation']['BLEU']:.4f}")
+        print(f"  ROUGE-1:    {final_metrics['conversation']['ROUGE-1']:.4f}")
+        print(f"  ROUGE-2:    {final_metrics['conversation']['ROUGE-2']:.4f}")
+        print(f"  ROUGE-L:    {final_metrics['conversation']['ROUGE-L']:.4f}")
+        print(f"  Avg Length: {final_metrics['conversation']['Avg_Length']:.2f} words\n")
 
-    print(f"Results saved to experiments/evaluation_turn_by_turn.txt")
+    # Save results
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments")
+    os.makedirs(results_dir, exist_ok=True)
+    results_path = os.path.join(results_dir, f"eval_format{args.format}_{args.dataset}.json")
     
-    # Print comparison table
-    r1 = final_recalls.get(1, 0)
-    r10 = final_recalls.get(10, 0)
-    r50 = final_recalls.get(50, 0)
-    
-    print("\nComparison Table:")
-    print("Method          | R@1   | R@10  | R@50")
-    print("-" * 42)
-    print("My full conv    | 0.190 | 0.570 | 0.745")
-    print(f"My turn by turn | {r1:.3f} | {r10:.3f} | {r50:.3f}")
-    print("KBRD paper      | 0.031 | 0.150 | 0.336")
-    print("TPLM paper      | 0.059 | 0.232 | 0.471")
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(final_metrics, f, indent=4)
+
+    print(f"{'='*60}")
+    print(f"Results saved to experiments/eval_format{args.format}_{args.dataset}.json")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":
-    evaluate(max_samples=200)
+    parser = argparse.ArgumentParser(description="Evaluate CRS Pipeline")
+    parser.add_argument("--format", type=int, choices=[1, 2, 3, 4], default=3,
+                        help="Serialization format (1-4)")
+    parser.add_argument("--dataset", type=str, choices=['redial', 'inspired'], default='redial',
+                        help="Dataset choice (redial or inspired)")
+    parser.add_argument("--max_samples", type=int, default=200,
+                        help="Max conversations to process")
+    
+    args = parser.parse_args()
+    evaluate(args)
