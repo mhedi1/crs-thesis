@@ -90,8 +90,12 @@ def get_recommended_movies_at_turn(sample: dict, turn_index: int) -> list:
     movie_mentions = sample.get("movieMentions", {})
     respondent_questions = sample.get("respondentQuestions", {})
 
+    if isinstance(respondent_questions, list):
+        print(f"[WARN] respondentQuestions is a list (index {turn_index}), treating as empty dict")
+        respondent_questions = {}
+
     movie_ids_in_text = re.findall(r'@(\d+)', text)
-    
+
     recommended_movies = []
     for movie_id in movie_ids_in_text:
         info = respondent_questions.get(movie_id, {})
