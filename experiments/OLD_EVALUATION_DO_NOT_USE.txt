@@ -1,7 +1,0 @@
-KBRD + Qwen Evaluation Results
-Dataset: ReDial test set
-Samples: 200
-
-Recall@1: 0.1900
-Recall@10: 0.5700
-Recall@50: 0.7450
