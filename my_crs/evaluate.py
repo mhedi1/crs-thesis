@@ -3,6 +3,8 @@ import re
 import sys
 import os
 import argparse
+import tempfile
+from datetime import datetime
 import nltk
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
@@ -35,7 +37,7 @@ def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
     top_k = candidates[:k]
     for c in top_k:
         for gt_movie in ground_truth:
-            if strict_title_match(c["title"], gt_movie):
+            if strict_title_match(c.get("title", ""), gt_movie):
                 return True
     return False
 
@@ -43,7 +45,7 @@ def get_rank(candidates: list, ground_truth: list) -> int:
     """Returns the rank (1-indexed) of the first exact hit, or 0 if no hit."""
     for rank, c in enumerate(candidates, 1):
         for gt_movie in ground_truth:
-            if strict_title_match(c["title"], gt_movie):
+            if strict_title_match(c.get("title", ""), gt_movie):
                 return rank
     return 0
 
@@ -131,6 +133,7 @@ def evaluate(args):
     hits = {k: [] for k in k_values}
     mrrs = []
     reranker_hits = []
+    reranker_fallbacks = 0
 
     generated_responses = []
     reference_responses = []
@@ -189,21 +192,27 @@ def evaluate(args):
 
                                 candidates, detected_decades = get_kbrd_candidates(dialogue_up_to, top_k=50)
 
-                                for k in k_values:
-                                    hit = is_hit(candidates, recommended_movies, k)
-                                    hits[k].append(hit)
-
+                                # Compute all values before appending to prevent partial appends if an exception fires
+                                hit_values = {k: is_hit(candidates, recommended_movies, k) for k in k_values}
                                 rank = get_rank(candidates, recommended_movies)
                                 mrr = 1.0 / rank if rank > 0 else 0.0
-                                mrrs.append(mrr)
-
-                                selected_movie = rerank(dialogue_up_to, candidates, era_hints=detected_decades, serialization_format=args.format)
-
+                                selected_movie, is_fallback = rerank(
+                                    dialogue_up_to, candidates,
+                                    era_hints=detected_decades,
+                                    serialization_format=args.format
+                                )
                                 reranker_hit = any(
-                                    strict_title_match(selected_movie["title"], gt)
+                                    strict_title_match(selected_movie.get("title", ""), gt)
                                     for gt in recommended_movies
                                 )
+
+                                # Append all at once — only reached if all computations above succeeded
+                                for k in k_values:
+                                    hits[k].append(hit_values[k])
+                                mrrs.append(mrr)
                                 reranker_hits.append(reranker_hit)
+                                if is_fallback:
+                                    reranker_fallbacks += 1
 
                                 if not args.recommendation_only:
                                     response = generate_response(dialogue_up_to, selected_movie)
@@ -259,6 +268,7 @@ def evaluate(args):
         "instances": total_evaluation_instances,
         "skipped_conversations": skipped_conversations,
         "skipped_instances": skipped_instances,
+        "reranker_fallbacks": reranker_fallbacks,
         "recommendation": {},
         "conversation": {}
     }
@@ -292,7 +302,8 @@ def evaluate(args):
         print(f"  Recall@10:   {final_metrics['recommendation']['Recall@10']:.4f}")
         print(f"  Recall@50:   {final_metrics['recommendation']['Recall@50']:.4f}")
         print(f"  MRR:         {final_metrics['recommendation']['MRR']:.4f}")
-        print(f"  Reranker@1:  {final_metrics['recommendation']['Reranker@1']:.4f}\n")
+        print(f"  Reranker@1:  {final_metrics['recommendation']['Reranker@1']:.4f}")
+        print(f"  Fallbacks:   {reranker_fallbacks}\n")
         
         if not args.recommendation_only:
             print("Conversation Metrics:")
@@ -308,16 +319,27 @@ def evaluate(args):
     # Save results
     results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments")
     os.makedirs(results_dir, exist_ok=True)
-    results_path = os.path.join(results_dir, f"eval_format{args.format}_{args.dataset}.json")
-    
-    with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(final_metrics, f, indent=4)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_path = os.path.join(results_dir, f"eval_format{args.format}_{args.dataset}_{timestamp}.json")
+
+    fd, tmp_path = tempfile.mkstemp(dir=results_dir, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_f:
+            json.dump(final_metrics, tmp_f, indent=4)
+        os.replace(tmp_path, results_path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
     print(f"Skip Report:")
     print(f"  Skipped conversations: {skipped_conversations}")
     print(f"  Skipped instances:     {skipped_instances}")
+    print(f"  Reranker fallbacks:    {reranker_fallbacks}")
     print(f"{'='*60}")
-    print(f"Results saved to experiments/eval_format{args.format}_{args.dataset}.json")
+    print(f"Results saved to experiments/eval_format{args.format}_{args.dataset}_{timestamp}.json")
     print(f"{'='*60}")
 
 

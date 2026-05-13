@@ -42,7 +42,8 @@ def call_qwen(messages) -> str:
                     "model": MODEL_NAME,
                     "messages": payload_messages,
                     "stream": False,
-                    "think": False
+                    "think": False,
+                    "temperature": 0,
                 },
                 timeout=60
             )
@@ -57,32 +58,26 @@ def call_qwen(messages) -> str:
                 raise
 
 
-def rerank(history: str, candidates: list[dict], era_hints: list = None, serialization_format: int = 3) -> dict:
+def rerank(history: str, candidates: list[dict], era_hints: list = None, serialization_format: int = 3) -> tuple[dict, bool]:
+    """Returns (selected_movie, is_fallback)"""
     prompt = build_rerank_prompt(history, candidates, era_hints=era_hints, serialization_format=serialization_format)
+    
     try:
         raw_output = call_qwen(prompt)
     except Exception as e:
         logger.warning("[Reranker] Qwen call failed after retries. Using fallback.")
-        return candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}
+        return (candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}, True)
 
     answer_idx = parse_answer_id(raw_output)
 
     if answer_idx is None:
         logger.warning("[Reranker] Could not parse answer. Using fallback.")
-        return candidates[0] if candidates else {
-            "title": "Unknown", 
-            "genre": "Unknown", 
-            "decade": "Unknown"
-        }
+        return (candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}, True)
 
     if answer_idx < 1 or answer_idx > len(candidates):
         logger.warning(f"[Reranker] Answer index {answer_idx} out of range. Using fallback.")
-        return candidates[0] if candidates else {
-            "title": "Unknown",
-            "genre": "Unknown", 
-            "decade": "Unknown"
-        }
+        return (candidates[0] if candidates else {"title": "Unknown", "genre": "Unknown", "decade": "Unknown"}, True)
 
     selected = candidates[answer_idx - 1]
     logger.info(f"[Reranker] Qwen selected position {answer_idx}: {selected['title']}")
-    return selected
+    return (selected, False)
