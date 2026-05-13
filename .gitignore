@@ -4,10 +4,11 @@ __pycache__/
 *.pkl
 *.pt
 *.log
+*.tmp
 .env
 mlruns/
 .claude/
 papers/
-experiments/eval_format*_redial.json
+experiments/eval_format*_redial*.json
 *.zip
 

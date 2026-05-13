@@ -302,8 +302,7 @@ def evaluate(args):
         print(f"  Recall@10:   {final_metrics['recommendation']['Recall@10']:.4f}")
         print(f"  Recall@50:   {final_metrics['recommendation']['Recall@50']:.4f}")
         print(f"  MRR:         {final_metrics['recommendation']['MRR']:.4f}")
-        print(f"  Reranker@1:  {final_metrics['recommendation']['Reranker@1']:.4f}")
-        print(f"  Fallbacks:   {reranker_fallbacks}\n")
+        print(f"  Reranker@1:  {final_metrics['recommendation']['Reranker@1']:.4f}\n")
         
         if not args.recommendation_only:
             print("Conversation Metrics:")

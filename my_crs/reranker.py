@@ -52,7 +52,7 @@ def call_qwen(messages) -> str:
             return data["message"]["content"]
         except requests.exceptions.RequestException as e:
             if attempt < 2:
-                logger.warning(f"Qwen timeout or error, retrying ({attempt + 1}/2)...")
+                logger.warning(f"Qwen timeout or error, retrying ({attempt + 1}/3)...")
             else:
                 logger.error(f"[QWEN ERROR] {e}")
                 raise

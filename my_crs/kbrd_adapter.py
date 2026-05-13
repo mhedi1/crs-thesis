@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 import logging
 import warnings
 from fuzzywuzzy import fuzz
+from reranker import call_qwen
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -326,8 +327,6 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
     if len(seed_list) < 4:
         logger.warning("[KBRD Adapter] Weak seeds detected, using Qwen fallback")
         try:
-            import requests
-            import difflib
             prompt = (
                 "Based on this movie recommendation conversation, \n"
                 "name exactly 3 well-known movies that match what \n"
@@ -337,16 +336,7 @@ def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
                 "Conversation:\n"
                 f"{dialogue}"
             )
-            payload = {
-                "model": "qwen3.5:35b",
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-                "think": False
-            }
-            response = requests.post("http://sinbad2ia.ujaen.es:8050/api/chat", json=payload, timeout=30)
-            response.raise_for_status()
-            
-            content = response.json().get("message", {}).get("content", "")
+            content = call_qwen(prompt)
             titles = [t.strip() for t in content.split('\n') if t.strip()]
             logger.debug(f"[KBRD Adapter] Qwen suggested seeds: {', '.join(titles)}")
             

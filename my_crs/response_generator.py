@@ -48,7 +48,7 @@ def generate_response(history: str, selected_movie: dict) -> str:
                 "- avoid mentioning unselected candidates\n\n"
                 f"[Dialogue History]\n{history}\n\n"
                 f"[Selected Recommendation]\n"
-                f"{selected_movie['title']}"
+                f"{selected_movie.get('title', '')}"
                 f"{' | ' + selected_movie['genre'] if selected_movie.get('genre') and selected_movie['genre'] != 'Unknown' else ''}"
                 f"{' | ' + selected_movie['decade'] if selected_movie.get('decade') and selected_movie['decade'] != 'Unknown' else ''}"
             )

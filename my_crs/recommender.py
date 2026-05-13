@@ -49,7 +49,7 @@ def get_recommendation(dialogue_history: list) -> dict:
     candidates, detected_decades = get_kbrd_candidates(dialogue_str, top_k=50)
     
     # Stage 2: Rerank with Qwen
-    selected_movie = rerank(dialogue_str, candidates, era_hints=detected_decades)
+    selected_movie, _ = rerank(dialogue_str, candidates, era_hints=detected_decades)
     
     # Stage 3: Generate response with Qwen
     response = generate_response(dialogue_str, selected_movie)

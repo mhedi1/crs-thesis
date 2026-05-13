@@ -12,7 +12,7 @@ def run_case(title: str, history: str, top_k: int = 5, use_kbrd: bool = False) -
         candidates = generate_candidates(history, top_k=top_k)
         stage1_name = "Local Candidate Generator"
 
-    selected_movie = rerank(history, candidates)
+    selected_movie, _ = rerank(history, candidates)
     response = generate_response(history, selected_movie)
 
     print("=" * 70)
