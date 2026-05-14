@@ -9,7 +9,6 @@ __pycache__/
 mlruns/
 .claude/
 papers/
-experiments/eval_format*_redial*.json
 *.zip
 
 .ipynb_checkpoints/
