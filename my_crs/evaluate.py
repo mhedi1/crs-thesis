@@ -167,7 +167,7 @@ def evaluate(args):
     Args:
         args: Parsed CLI arguments (format, dataset, max_samples, recommendation_only).
     """
-    mlflow_db_path = os.path.join(_PROJECT_ROOT, "experiments", "mlflow.db")
+    mlflow_db_path = os.path.join(_PROJECT_ROOT, "experiments", f"mlflow_format{args.format}.db")
     mlflow.set_tracking_uri(f"sqlite:///{mlflow_db_path}")
     mlflow.set_experiment("crs-thesis")
     mlflow_run = mlflow.start_run()
