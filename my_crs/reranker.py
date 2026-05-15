@@ -1,3 +1,5 @@
+import os
+import yaml
 import requests
 import logging
 from prompts import build_rerank_prompt
@@ -5,8 +7,14 @@ from utils import parse_answer_id
 
 logger = logging.getLogger(__name__)
 
-LLM_URL = "http://sinbad2ia.ujaen.es:8050/api/chat"
-MODEL_NAME = "qwen3.5:35b"
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")) as _f:
+    _cfg = yaml.safe_load(_f)
+
+LLM_URL = _cfg["qwen"]["server_url"]
+MODEL_NAME = _cfg["qwen"]["model"]
+_TIMEOUT = _cfg["qwen"]["timeout"]
+_MAX_RETRIES = _cfg["qwen"]["max_retries"]
+_THINK = _cfg["qwen"]["think"]
 USE_FAKE_MODE = False
 
 
@@ -34,7 +42,7 @@ def call_qwen(messages) -> str:
     else:
         payload_messages = messages
 
-    for attempt in range(3):
+    for attempt in range(_MAX_RETRIES):
         try:
             response = requests.post(
                 LLM_URL,
@@ -42,17 +50,17 @@ def call_qwen(messages) -> str:
                     "model": MODEL_NAME,
                     "messages": payload_messages,
                     "stream": False,
-                    "think": False,
+                    "think": _THINK,
                     "temperature": 0,
                 },
-                timeout=60
+                timeout=_TIMEOUT
             )
             response.raise_for_status()
             data = response.json()
             return data["message"]["content"]
         except requests.exceptions.RequestException as e:
-            if attempt < 2:
-                logger.warning(f"Qwen timeout or error, retrying ({attempt + 1}/3)...")
+            if attempt < _MAX_RETRIES - 1:
+                logger.warning(f"Qwen timeout or error, retrying ({attempt + 1}/{_MAX_RETRIES})...")
             else:
                 logger.error(f"[QWEN ERROR] {e}")
                 raise

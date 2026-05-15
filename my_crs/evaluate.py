@@ -10,6 +10,7 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 from collections import defaultdict
 import mlflow
+import yaml
 
 _MY_CRS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_MY_CRS_DIR)
@@ -17,6 +18,9 @@ _KBRD_PATH = os.path.join(_PROJECT_ROOT, "baseline_repo", "KBRD_project", "KBRD"
 
 sys.path.insert(0, _MY_CRS_DIR)
 sys.path.insert(0, _KBRD_PATH)
+
+with open(os.path.join(_MY_CRS_DIR, "config.yaml")) as _f:
+    _cfg = yaml.safe_load(_f)
 
 from kbrd_adapter import get_kbrd_candidates
 from reranker import rerank
@@ -141,7 +145,7 @@ def evaluate(args):
         "recommendation_only": args.recommendation_only,
     })
 
-    k_values = [1, 10, 50]
+    k_values = _cfg["evaluation"]["k_values"]
     hits = {k: [] for k in k_values}
     mrrs = []
     reranker_hits = []
@@ -202,7 +206,7 @@ def evaluate(args):
                                 # Evaluation instance
                                 dialogue_up_to = build_dialogue_up_to(sample, turn_index)
 
-                                candidates, detected_decades = get_kbrd_candidates(dialogue_up_to, top_k=50)
+                                candidates, detected_decades = get_kbrd_candidates(dialogue_up_to, top_k=_cfg["pipeline"]["top_k_candidates"])
 
                                 # Compute all values before appending to prevent partial appends if an exception fires
                                 hit_values = {k: is_hit(candidates, recommended_movies, k) for k in k_values}

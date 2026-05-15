@@ -1,17 +1,17 @@
-# Paths
+# Paths (relative to project root)
 paths:
-  kbrd_repo: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD"
-  data: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD\\data\\redial"
-  model: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD\\saved\\kbrd_model"
-  test_data: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\baseline_repo\\KBRD_project\\KBRD\\data\\redial\\test_data.jsonl"
-  embeddings: "C:\\Users\\mhfou\\Desktop\\thesis_crs\\my_crs\\movie_embeddings.pkl"
+  kbrd_repo: "baseline_repo/KBRD_project/KBRD"
+  data: "baseline_repo/KBRD_project/KBRD/data/redial"
+  model: "baseline_repo/KBRD_project/KBRD/saved/kbrd_model"
+  test_data: "baseline_repo/KBRD_project/KBRD/data/redial/test_data.jsonl"
+  embeddings: "my_crs/movie_embeddings.pkl"
 
 # Qwen server
 qwen:
   server_url: "http://sinbad2ia.ujaen.es:8050/api/chat"
   model: "qwen3.5:35b"
   timeout: 60
-  max_retries: 2
+  max_retries: 3
   think: false
 
 # Pipeline settings
