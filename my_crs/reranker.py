@@ -19,6 +19,15 @@ USE_FAKE_MODE = False
 
 
 def call_qwen(messages) -> str:
+    """Send a prompt to the Qwen LLM and return its text response.
+
+    Args:
+        messages: A string prompt or a list of OpenAI-style message dicts.
+
+    Returns:
+        The model's response content as a string. Raises
+        RequestException if all retries are exhausted.
+    """
     if USE_FAKE_MODE:
         if isinstance(messages, list):
             prompt = messages[-1]["content"]
@@ -67,7 +76,18 @@ def call_qwen(messages) -> str:
 
 
 def rerank(history: str, candidates: list[dict], era_hints: list = None, serialization_format: int = 3) -> tuple[dict, bool]:
-    """Returns (selected_movie, is_fallback)"""
+    """Select the best candidate movie using Qwen as a reranker.
+
+    Args:
+        history: Dialogue history string passed as context to Qwen.
+        candidates: Ranked list of candidate dicts from KBRD.
+        era_hints: Optional decade strings detected in the dialogue.
+        serialization_format: Integer (1-4) controlling the prompt format.
+
+    Returns:
+        Tuple of (selected_movie_dict, is_fallback). is_fallback is True when
+        Qwen fails or returns an unparseable answer.
+    """
     prompt = build_rerank_prompt(history, candidates, era_hints=era_hints, serialization_format=serialization_format)
     
     try:

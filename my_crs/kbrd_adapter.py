@@ -293,6 +293,14 @@ def _load_kbrd_model():
 
 
 def _enrich_candidate(candidate):
+    """Augment a candidate dict with genre, director, and year from the cache.
+
+    Args:
+        candidate: Candidate dict with at least an "id" key.
+
+    Returns:
+        The same dict updated in place with any available cache data.
+    """
     eid = str(candidate.get('id', ''))
     if eid in _genre_cache:
         entry = _genre_cache[eid]
@@ -311,6 +319,19 @@ def _enrich_candidate(candidate):
 
 
 def get_kbrd_candidates(dialogue: str, top_k: int = 5) -> tuple:
+    """Generate ranked movie candidates from the KBRD neural model.
+
+    Loads model and resources on first call, extracts seed entities from the
+    dialogue, runs KBRD inference, and returns enriched candidate dicts.
+
+    Args:
+        dialogue: Full conversation history as a formatted string.
+        top_k: Maximum number of candidates to return.
+
+    Returns:
+        Tuple of (candidates, detected_decades). candidates is a list of dicts;
+        detected_decades is a list of decade strings found in the dialogue.
+    """
     logger.info(f"\n{'=' * 50}")
     logger.info("[KBRD Neural] Starting Neural KBRD Candidate Generation")
     logger.info(f"{'=' * 50}")

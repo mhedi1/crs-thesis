@@ -34,11 +34,28 @@ def normalize_title(title: str) -> str:
     return title.lower().strip()
 
 def strict_title_match(title_a: str, title_b: str) -> bool:
-    """Exact match after normalization. No substring matching."""
+    """Check whether two movie titles are identical after normalization.
+
+    Args:
+        title_a: First title string.
+        title_b: Second title string.
+
+    Returns:
+        True if normalized titles are equal, False otherwise.
+    """
     return normalize_title(title_a) == normalize_title(title_b)
 
 def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
-    """Check if any ground truth movie exactly matches any of top-k candidates."""
+    """Check whether any ground-truth title appears in the top-k candidates.
+
+    Args:
+        candidates: Ranked list of candidate dicts with a "title" key.
+        ground_truth: Ground-truth movie title strings to match against.
+        k: Number of top candidates to consider.
+
+    Returns:
+        True if at least one ground-truth title exactly matches a top-k candidate.
+    """
     top_k = candidates[:k]
     for c in top_k:
         for gt_movie in ground_truth:
@@ -47,7 +64,15 @@ def is_hit(candidates: list, ground_truth: list, k: int) -> bool:
     return False
 
 def get_rank(candidates: list, ground_truth: list) -> int:
-    """Returns the rank (1-indexed) of the first exact hit, or 0 if no hit."""
+    """Return the 1-indexed rank of the first ground-truth hit in candidates.
+
+    Args:
+        candidates: Ranked list of candidate dicts with a "title" key.
+        ground_truth: Ground-truth movie title strings to match against.
+
+    Returns:
+        Rank of the first matching candidate (1-indexed), or 0 if no hit.
+    """
     for rank, c in enumerate(candidates, 1):
         for gt_movie in ground_truth:
             if strict_title_match(c.get("title", ""), gt_movie):
@@ -134,6 +159,14 @@ def calculate_distinct_n(responses: list, n: int) -> float:
     return len(unique_ngrams) / total_ngrams
 
 def evaluate(args):
+    """Run the turn-by-turn CRS evaluation loop over the test set.
+
+    Computes recommendation and conversation metrics, logs parameters and
+    metrics to MLflow, and writes a JSON report to the experiments/ directory.
+
+    Args:
+        args: Parsed CLI arguments (format, dataset, max_samples, recommendation_only).
+    """
     mlflow_db_path = os.path.join(_PROJECT_ROOT, "experiments", "mlflow.db")
     mlflow.set_tracking_uri(f"sqlite:///{mlflow_db_path}")
     mlflow.set_experiment("crs-thesis")
