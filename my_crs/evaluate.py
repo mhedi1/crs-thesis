@@ -9,6 +9,7 @@ import nltk
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 from collections import defaultdict
+import mlflow
 
 _MY_CRS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_MY_CRS_DIR)
@@ -129,6 +130,17 @@ def calculate_distinct_n(responses: list, n: int) -> float:
     return len(unique_ngrams) / total_ngrams
 
 def evaluate(args):
+    mlflow_db_path = os.path.join(_PROJECT_ROOT, "experiments", "mlflow.db")
+    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db_path}")
+    mlflow.set_experiment("crs-thesis")
+    mlflow_run = mlflow.start_run()
+    mlflow.log_params({
+        "format": args.format,
+        "dataset": args.dataset,
+        "max_samples": args.max_samples,
+        "recommendation_only": args.recommendation_only,
+    })
+
     k_values = [1, 10, 50]
     hits = {k: [] for k in k_values}
     mrrs = []
@@ -289,6 +301,17 @@ def evaluate(args):
             final_metrics["conversation"]["ROUGE-L"] = sum(rouge_scores['rougeL']) / len(rouge_scores['rougeL'])
             final_metrics["conversation"]["Avg_Length"] = sum(response_lengths) / len(response_lengths)
 
+    if total_evaluation_instances > 0:
+        mlflow.log_metrics({
+            "Recall_at_1": final_metrics["recommendation"]["Recall@1"],
+            "Recall_at_10": final_metrics["recommendation"]["Recall@10"],
+            "Recall_at_50": final_metrics["recommendation"]["Recall@50"],
+            "MRR": final_metrics["recommendation"]["MRR"],
+            "Reranker_at_1": final_metrics["recommendation"]["Reranker@1"],
+        })
+    mlflow.log_metric("reranker_fallbacks", reranker_fallbacks)
+    final_metrics["mlflow_run_id"] = mlflow_run.info.run_id
+
     # Print summary table
     print(f"\n{'='*60}")
     print(f"FINAL RESULTS")
@@ -339,7 +362,9 @@ def evaluate(args):
     print(f"  Reranker fallbacks:    {reranker_fallbacks}")
     print(f"{'='*60}")
     print(f"Results saved to experiments/eval_format{args.format}_{args.dataset}_{timestamp}.json")
+    print(f"MLflow run ID: {mlflow_run.info.run_id}")
     print(f"{'='*60}")
+    mlflow.end_run()
 
 
 if __name__ == "__main__":
