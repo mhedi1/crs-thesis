@@ -1,0 +1,25 @@
+%% General use case diagram — deliberately high level.
+%% Prefer 05_use_case.puml for the report: PlantUML renders real UML notation.
+%% This Mermaid version is a fallback if you cannot run PlantUML.
+flowchart LR
+    U(("User"))
+
+    subgraph SYS["Conversational Movie Recommender"]
+        direction TB
+        UC1(["Request a movie recommendation"])
+        UC2(["Ask a follow-up about the current recommendation"])
+        UC3(["Start a new conversation"])
+    end
+
+    E(("Recommendation<br/>Engine"))
+    T(("Movie Metadata<br/>Service"))
+
+    U --- UC1
+    U --- UC2
+    U --- UC3
+
+    UC1 --- E
+    UC1 --- T
+
+    classDef actor fill:#ffffff,stroke:#333333,stroke-width:1px,color:#111111;
+    class U,E,T actor;

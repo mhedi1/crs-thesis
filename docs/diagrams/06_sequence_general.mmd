@@ -1,0 +1,19 @@
+%% General sequence diagram — the main recommendation scenario.
+%% Prefer 06_sequence_general.puml for the report.
+%% Deliberately high level: four participants, one happy path, no error branches.
+sequenceDiagram
+    actor User
+    participant App as Web Application
+    participant LLM as Language Model
+    participant Engine as Recommendation Engine
+
+    User->>App: send a message
+    App->>LLM: classify the request
+    LLM-->>App: intent
+    App->>Engine: conversation history
+    Engine->>Engine: retrieve candidates<br/>(KBRD + knowledge graph)
+    Engine->>Engine: fuse and rerank<br/>(RRF + Stage 2)
+    Engine-->>App: ranked recommendation
+    App->>LLM: generate the reply
+    LLM-->>App: natural-language response
+    App-->>User: recommendation and explanation

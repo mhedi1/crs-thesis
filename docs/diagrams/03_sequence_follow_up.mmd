@@ -1,0 +1,46 @@
+%% FOLLOW_UP turn: stays local. The recommender is never contacted.
+%% Source of truth: web_app/app.py api_chat FOLLOW_UP branch,
+%% _previous_options_response, _generate_followup_response,
+%% my_crs/response_generator.py generate_response
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant NX as Next.js proxy
+    participant FL as Flask api_chat
+    participant RG as response_generator
+    participant Q3 as Qwen3 local
+    participant API as UJA GPU /recommend
+
+    U->>NX: POST /api/chat {message}
+    NX->>FL: forward + session cookie
+
+    alt explicit reference to previously shown options
+        Note over FL: "out of those", "which of those",<br/>"among these", "between them", ...
+        FL->>FL: _previous_options_response(last_movie)
+        Note over FL,Q3: Intent classification is short-circuited,<br/>so not even Qwen3 is called.
+        FL-->>U: static reply — the follow-up layer does not re-rank
+    else ordinary message
+        FL->>Q3: classify_intent(message)
+        Q3-->>FL: FOLLOW_UP
+
+        alt a current selection exists
+            FL->>RG: generate_response(history, last_movie, is_followup=True)
+            RG->>RG: unverifiable_constraints(latest user turn, last_movie)
+
+            alt cast / director / year / rating requested but unverified
+                RG-->>FL: deterministic "cannot confirm" reply
+                Note over RG,Q3: Qwen3 is bypassed entirely.
+            else verified, or no factual constraint
+                RG->>Q3: call_qwen(grounded prompt)
+                Q3-->>RG: SELECTED_TITLE + RESPONSE
+                RG->>RG: reject if the title was substituted
+                RG-->>FL: grounded answer about the current movie
+            end
+
+            FL-->>U: answer, candidates = [], selected_candidate = null
+        else no current selection
+            Note over FL: Falls through to the NEW_PREFERENCE path.
+        end
+    end
+
+    Note over API: Never contacted on any FOLLOW_UP path.<br/>Ranking happens once per recommendation request.

@@ -1,0 +1,41 @@
+%% Frozen scientific pipeline: Stage 1 retrieval + fusion, Stage 2 reranking.
+%% Source of truth: my_crs/final_recommender.py, my_crs/evaluate_rrf_fusion.py,
+%% my_crs/stage2_v2_runtime.py, my_crs/joint_rrf_ranker.py
+flowchart TB
+    H["Pre-target dialogue history<br/>User / System turns"]
+
+    H --> EX["Entity extraction<br/>prepare_input"]
+
+    EX -->|"selected seeds"| KB["KBRD neural retrieval<br/>pure mode: no seed fusion,<br/>no Qwen fallback"]
+    EX -->|"all extracted entity ids"| CK["Conversational CKG<br/>conditional weighting,<br/>min support 2"]
+
+    KB --> K50["KBRD Top-50"]
+    CK --> C50["CKG budget-controlled Top-50"]
+
+    K50 --> RRF
+    C50 --> RRF
+    RRF["Reciprocal Rank Fusion<br/>equal weights, k = 60"]
+
+    RRF --> T50["Stage-1 RRF Top-50<br/>50 unique candidates"]
+
+    T50 --> SER["Deterministic serialization<br/>salted-hash order, C01..C50"]
+    SER --> TOK["Packed tokenization<br/>ceiling 2304, no truncation"]
+    TOK --> MOD["Qwen2.5-3B-Instruct + LoRA<br/>beta = 1.0, checkpoint step 1254"]
+    MOD --> RES["50 contextual residuals"]
+
+    T50 -.->|"frozen RRF scores"| COMB
+    RES --> COMB["Final score, float64<br/>log normalised RRF prior<br/>+ mean-centred residual"]
+
+    COMB --> RANK["Deterministic ranking<br/>tie-break: RRF rank, then entity id"]
+    RANK --> OUT["Final ranking<br/>same 50 candidates, reordered"]
+
+    INV["Candidate membership is fixed at the Stage-1 RRF Top-50.<br/>Stage 2 changes ordering only: no insertion,<br/>deletion, replacement or fallback."]
+    T50 -.- INV
+    OUT -.- INV
+
+    classDef stage1 fill:#eef7ee,stroke:#2f7a34,stroke-width:1px;
+    classDef stage2 fill:#e8f0fe,stroke:#1a56db,stroke-width:1px;
+    classDef invariant fill:#fff8e1,stroke:#b45309,stroke-width:1px,font-style:italic;
+    class EX,KB,CK,K50,C50,RRF,T50 stage1;
+    class SER,TOK,MOD,RES,COMB,RANK,OUT stage2;
+    class INV invariant;

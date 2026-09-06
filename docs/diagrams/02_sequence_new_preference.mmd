@@ -1,0 +1,70 @@
+%% NEW_PREFERENCE turn: the full recommendation path.
+%% Source of truth: web_app/app.py api_chat + remote_recommender,
+%% remote_recommender_api.py recommend, my_crs/final_recommender.py recommend,
+%% my_crs/stage2_v2_runtime.py rank, my_crs/response_generator.py generate_response
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant NX as Next.js proxy
+    participant FL as Flask api_chat
+    participant Q3 as Qwen3 local
+    participant API as UJA GPU /recommend
+    participant FR as FinalRecommender
+    participant KB as KBRD
+    participant CK as Conversational CKG
+    participant S2 as Stage2-v2 ranker
+    participant TM as TMDB
+
+    U->>NX: POST /api/chat {message}
+    NX->>FL: forward + session cookie
+
+    FL->>FL: _references_previous_options(message) = false
+    FL->>Q3: classify_intent(message)
+    Q3-->>FL: NEW_PREFERENCE
+    FL->>FL: dialogue_str = "User: ... / System: ..." full history
+
+    FL->>API: POST /recommend {history} + Bearer token
+    API->>FR: engine.recommend(history)
+
+    FR->>KB: prepare_input(history)
+    KB-->>FR: all_extracted_entity_ids
+    FR->>KB: get_kbrd_candidates(top_k=50, retrieval_mode="kbrd", use_fusion=False)
+    KB-->>FR: 50 KBRD_NEURAL candidates
+    Note over FR,KB: Any KBRD fallback is rejected.<br/>Static movies can never enter the set.
+
+    FR->>CK: retrieve_views(all_extracted_entity_ids, top_k=50)
+    CK-->>FR: 50 budget-controlled candidates
+    FR->>FR: reciprocal_rank_fusion(k=60, top_k=50)
+    Note over FR: Frozen RRF Top-50. Membership is fixed from here on.
+
+    FR->>S2: rank(history, rrf_top50)
+    S2->>S2: serialize_candidates + canonicalize + tokenize
+    alt packed tokens > 2304
+        S2--)FR: ValueError, truncation forbidden
+        FR--)API: propagates
+        API-->>FL: 413 {"error": "input_too_long"}
+        FL-->>U: "This conversation has become too long..."
+        Note over FL: No retry. No local fallback ranker.
+    else within the frozen ceiling
+        S2->>S2: Qwen2.5-3B + LoRA, 50 contextual residuals
+        S2->>S2: log-RRF prior + mean-centred residual, float64
+        S2-->>FR: 50 candidates reordered, identical membership
+    end
+
+    FR-->>API: selected_candidate, ranked_candidates, diagnostics
+    API-->>FL: 200 JSON
+
+    FL->>FL: generate_response(dialogue_str, selected_movie)
+    alt requested factual constraint has no verified metadata
+        FL->>FL: deterministic "cannot confirm" reply
+        Note over FL,Q3: Qwen3 is never called on this path.
+    else constraint verified, or no factual constraint
+        FL->>Q3: call_qwen(grounded prompt)
+        Q3-->>FL: SELECTED_TITLE + RESPONSE
+        FL->>FL: reject if SELECTED_TITLE differs from selection
+    end
+
+    FL->>TM: enrich_with_tmdb(title)
+    TM-->>FL: poster, genre, rating, overview
+    FL-->>NX: response, movie, top-5, final_rank
+    NX-->>U: rendered recommendation

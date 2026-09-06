@@ -1,0 +1,52 @@
+' General sequence diagram — the main recommendation scenario.
+' Deliberately high level: four participants, one happy path, no error branches.
+' The two self-messages on the engine keep the two-stage design visible,
+' which is the thesis contribution; everything else is collapsed.
+@startuml sequence_general
+
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam defaultFontName "Helvetica"
+skinparam defaultFontSize 13
+skinparam roundcorner 4
+
+skinparam sequence {
+  ArrowColor #33507A
+  LifeLineBorderColor #AAAAAA
+  LifeLineBackgroundColor #F4F7FB
+  ParticipantBorderColor #33507A
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontColor #111111
+  ActorBorderColor #333333
+  ActorBackgroundColor #FFFFFF
+}
+
+actor "User" as user
+participant "Web Application" as app
+participant "Language Model" as llm
+participant "Recommendation Engine" as engine
+
+user -> app : send a message
+activate app
+
+app -> llm : classify the request
+activate llm
+llm --> app : intent
+deactivate llm
+
+app -> engine : conversation history
+activate engine
+engine -> engine : retrieve candidates\n(KBRD + knowledge graph)
+engine -> engine : fuse and rerank\n(RRF + Stage 2)
+engine --> app : ranked recommendation
+deactivate engine
+
+app -> llm : generate the reply
+activate llm
+llm --> app : natural-language response
+deactivate llm
+
+app --> user : recommendation and explanation
+deactivate app
+
+@enduml

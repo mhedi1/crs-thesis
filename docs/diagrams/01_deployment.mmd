@@ -1,0 +1,42 @@
+%% Deployment / architecture view.
+%% Source of truth: web_app/app.py, remote_recommender_api.py, my_crs/final_recommender.py
+flowchart LR
+    subgraph LAPTOP["Laptop — conversational layer"]
+        direction TB
+        BR["Browser<br/>chat UI"]
+        NX["Next.js<br/>/api/chat proxy"]
+        FL["Flask backend<br/>web_app/app.py"]
+        Q3["Qwen3 8B — local<br/>intent + NLG only<br/>never ranks"]
+        TM["TMDB API<br/>poster / genre / rating"]
+    end
+
+    subgraph GPU["UJA GPU server — frozen scientific layer"]
+        direction TB
+        API["Authenticated API<br/>remote_recommender_api.py<br/>Bearer token"]
+        FR["FinalRecommender"]
+        KB["KBRD<br/>pure neural retrieval"]
+        CK["Conversational CKG<br/>conditional, support 2"]
+        RRF["Equal-weight RRF<br/>k = 60, Top-50"]
+        S2["Stage2-v2 reranker<br/>Qwen2.5-3B-Instruct + LoRA<br/>beta = 1.0, step 1254"]
+    end
+
+    BR -->|"HTTPS"| NX
+    NX -->|"127.0.0.1:5000"| FL
+    FL <-->|"intent + response generation"| Q3
+    FL -->|"metadata enrichment"| TM
+    FL -->|"POST /recommend<br/>history only"| API
+
+    API --> FR
+    FR --> KB
+    FR --> CK
+    KB --> RRF
+    CK --> RRF
+    RRF -->|"frozen Top-50"| S2
+    S2 -->|"same 50, reordered"| FR
+    FR -->|"selected_candidate<br/>ranked_candidates<br/>diagnostics"| API
+    API -->|"200 / 413 / 500"| FL
+
+    classDef frozen fill:#e8f0fe,stroke:#1a56db,stroke-width:1px;
+    classDef local fill:#f3f4f6,stroke:#4b5563,stroke-width:1px;
+    class API,FR,KB,CK,RRF,S2 frozen;
+    class BR,NX,FL,Q3,TM local;
