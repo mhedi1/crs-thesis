@@ -143,3 +143,90 @@ body {
 .animate-aurora-1 { animation: aurora-1 18s ease-in-out infinite; }
 .animate-aurora-2 { animation: aurora-2 22s ease-in-out infinite; }
 .animate-aurora-3 { animation: aurora-3 26s ease-in-out infinite; }
+
+/* ── Homepage rhythm ────────────────────────────────────────────────────────
+   The landing composition is meant to be read in one view, but real browser
+   viewports are far shorter than the display: a 1920x1080 screen at 125%
+   Windows scaling yields ~1536x698 CSS pixels once the taskbar and browser
+   chrome are subtracted. These tokens step vertical spacing and display type
+   up as width and height allow, so the page fits without zooming and still
+   breathes on tall monitors. Spacing and font-size only - no transforms. */
+.home-scale {
+  --home-pad: 1.75rem;
+  --home-gap-badge: 1.5rem;
+  --home-gap-head: 1rem;
+  --home-gap-sub: 1.5rem;
+  --home-gap-section: 2.25rem;
+  --home-gap-cards: 1.5rem;
+  --home-gap-footer: 1.75rem;
+  --home-gap-footer-text: 1rem;
+  --home-card-pad: 1.5rem;
+  --home-cta-pad: 0.75rem;
+
+  --home-h1: 2.25rem;
+  --home-sub: 1rem;
+  --home-card-title: 1.125rem;
+  --home-card-body: 0.875rem;
+}
+
+/* Vertical rhythm follows available height. */
+@media (min-height: 780px) {
+  .home-scale {
+    --home-pad: 2.375rem;
+    --home-gap-badge: 2rem;
+    --home-gap-head: 1.25rem;
+    --home-gap-sub: 1.875rem;
+    --home-gap-section: 3.25rem;
+    --home-gap-cards: 2rem;
+    --home-gap-footer: 2.75rem;
+    --home-gap-footer-text: 1.25rem;
+    --home-card-pad: 1.75rem;
+    --home-cta-pad: 0.875rem;
+  }
+}
+
+@media (min-height: 1060px) {
+  .home-scale {
+    --home-pad: 3.5rem;
+    --home-gap-badge: 2.5rem;
+    --home-gap-head: 1.75rem;
+    --home-gap-sub: 2.75rem;
+    --home-gap-section: 6rem;
+    --home-gap-cards: 2.5rem;
+    --home-gap-footer: 5rem;
+    --home-gap-footer-text: 1.5rem;
+    --home-card-pad: 2rem;
+    --home-cta-pad: 1rem;
+  }
+}
+
+/* Display type follows width first. */
+@media (min-width: 640px) {
+  .home-scale { --home-h1: 3rem; }
+}
+
+@media (min-width: 1024px) {
+  .home-scale { --home-h1: 3.75rem; --home-sub: 1.125rem; }
+}
+
+/* At desktop widths it also follows the height actually available. */
+@media (min-width: 1280px) {
+  .home-scale { --home-h1: 3.25rem; --home-sub: 1rem; }
+}
+
+@media (min-width: 1280px) and (min-height: 780px) {
+  .home-scale {
+    --home-h1: 4rem;
+    --home-sub: 1.1rem;
+    --home-card-title: 1.25rem;
+    --home-card-body: 0.9375rem;
+  }
+}
+
+@media (min-width: 1280px) and (min-height: 1060px) {
+  .home-scale {
+    --home-h1: 4.75rem;
+    --home-sub: 1.2rem;
+    --home-card-body: 0.95rem;
+  }
+}

@@ -21,8 +21,8 @@ export function Header({ onClear, disabled }: { onClear: () => void; disabled: b
           <Clapperboard className="size-5" aria-hidden="true" />
         </div>
         <div className="leading-tight">
-          <h1 className="text-[17px] font-bold text-foreground m-0 tracking-normal">CineSeek</h1>
-          <p className="text-[13px] text-muted-foreground m-0">Conversational recommender</p>
+          <h1 className="text-[17px] font-bold text-foreground m-0 tracking-normal">Conversational Recommender</h1>
+          <p className="text-[13px] text-muted-foreground m-0">Movie recommendation prototype</p>
         </div>
       </Link>
 

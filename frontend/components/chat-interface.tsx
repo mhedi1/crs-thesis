@@ -43,11 +43,13 @@ function TypingIndicator() {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex gap-4 items-end"
+      role="status"
+      aria-live="polite"
     >
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary shadow-sm border border-primary/20">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary border border-primary/20 dark:shadow-sm">
         <Sparkles className="size-4" aria-hidden="true" />
       </div>
-      <div className="flex items-center gap-3 rounded-2xl rounded-bl-[10px] bg-card/60 backdrop-blur-md px-5 py-4 border border-border/50 shadow-sm">
+      <div className="flex items-center gap-3 rounded-2xl rounded-bl-[10px] bg-card/60 backdrop-blur-md px-5 py-4 border border-border/50 dark:shadow-sm">
         <div className="flex items-center gap-1.5">
           {[0, 1, 2].map((i) => (
             <span
@@ -58,7 +60,7 @@ function TypingIndicator() {
           ))}
         </div>
         <span className="text-[0.85rem] font-medium text-muted-foreground animate-pulse">
-          Analyzing request & consulting Qwen...
+          Running recommendation pipeline&hellip;
         </span>
       </div>
     </motion.div>
@@ -93,7 +95,7 @@ function StarterCard({ text, onSend, index }: { text: string, onSend: (s:string)
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={() => onSend(text)}
-      className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 backdrop-blur-xl p-4 text-left shadow-sm transition-colors hover:bg-muted/80 hover:shadow-xl hover:border-primary/30 cursor-pointer"
+      className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 backdrop-blur-xl p-4 text-left transition-colors hover:bg-muted/80 hover:border-primary/30 dark:shadow-sm dark:hover:shadow-xl cursor-pointer"
     >
       <span className="text-[0.9rem] font-medium text-foreground/80">{text}</span>
     </motion.button>
@@ -115,7 +117,7 @@ function EmptyState({ onSend }: { onSend: (text: string) => void }) {
         initial={{ scale: 0.8, opacity: 0, filter: "blur(10px)" }}
         animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
         transition={{ type: "spring", damping: 20, stiffness: 100 }}
-        className="mb-8 flex size-16 items-center justify-center rounded-2xl bg-card/60 backdrop-blur-xl border border-border/60 shadow-lg"
+        className="mb-8 flex size-16 items-center justify-center rounded-2xl bg-card/60 backdrop-blur-xl border border-border/60 shadow-sm dark:shadow-lg"
       >
         <Clapperboard className="size-7 text-primary" aria-hidden="true" />
       </motion.div>
@@ -274,9 +276,9 @@ export function ChatInterface() {
   return (
     <div ref={dragConstraintsRef} className="flex h-dvh overflow-hidden bg-background relative">
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-[20%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-primary/10 blur-[120px] animate-aurora-1 opacity-60 mix-blend-screen dark:opacity-30" />
-        <div className="absolute top-[40%] -right-[10%] w-[50vw] h-[50vw] rounded-full bg-movie-gold/10 blur-[120px] animate-aurora-2 opacity-50 mix-blend-screen dark:opacity-20" />
-        <div className="absolute -bottom-[20%] left-[20%] w-[70vw] h-[70vw] rounded-full bg-primary/10 blur-[120px] animate-aurora-3 opacity-40 mix-blend-screen dark:opacity-20" />
+        <div className="absolute -top-[20%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-primary/10 blur-[120px] animate-aurora-1 opacity-20 mix-blend-screen dark:opacity-30" />
+        <div className="absolute top-[40%] -right-[10%] w-[50vw] h-[50vw] rounded-full bg-movie-gold/10 blur-[120px] animate-aurora-2 opacity-15 mix-blend-screen dark:opacity-20" />
+        <div className="absolute -bottom-[20%] left-[20%] w-[70vw] h-[70vw] rounded-full bg-primary/10 blur-[120px] animate-aurora-3 opacity-10 mix-blend-screen dark:opacity-20" />
         <div className="absolute inset-0 bg-background/60 backdrop-blur-[40px]" />
       </div>
 
@@ -289,14 +291,20 @@ export function ChatInterface() {
           <button
             type="button"
             onClick={() => setSidebarOpen((o) => !o)}
-            aria-label="Toggle System Intel panel"
-            className="mr-4 flex size-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer shadow-sm hover:shadow"
+            aria-label="System Intel"
+            title="System Intel"
+            aria-expanded={sidebarOpen}
+            aria-controls="system-intel-panel"
+            className="mr-4 flex size-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 cursor-pointer dark:shadow-sm"
           >
             {sidebarOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
           </button>
         </div>
 
-        <div id="chat-scroll-container" ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin pb-32 scroll-pb-[140px]">
+        {/* Bottom padding clears the fixed composer block (pt-10 + ~62px input
+            + pb-6 = ~126px) plus a comfortable gap, so expanded Pipeline
+            Details can always be scrolled clear of it. */}
+        <div id="chat-scroll-container" ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin pb-44 scroll-pb-[184px]">
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-8 md:px-8">
             {messages.length === 0 && !loading ? (
               <EmptyState onSend={handleSend} />
@@ -328,7 +336,8 @@ export function ChatInterface() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: -20 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="absolute right-4 top-20 z-50 w-80 max-h-[70vh] flex flex-col bg-card/70 backdrop-blur-3xl border border-border/50 shadow-[0_20px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.4)] rounded-[20px] overflow-hidden cursor-grab active:cursor-grabbing"
+            id="system-intel-panel"
+            className="absolute right-4 top-20 z-50 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] flex flex-col bg-card/70 backdrop-blur-3xl border border-border/50 shadow-[0_6px_20px_rgba(0,0,0,0.07)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.4)] rounded-[20px] overflow-hidden cursor-grab active:cursor-grabbing"
             style={{ touchAction: "none" }}
           >
             {/* Drag Handle Area */}

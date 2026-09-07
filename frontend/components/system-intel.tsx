@@ -72,10 +72,6 @@ export function SystemIntel({ profile }: { profile: Profile }) {
           )}
         </div>
       </div>
-      
-      <div className="text-[0.7rem] text-muted-foreground text-center opacity-70 mt-auto pt-3">
-        Mohamed Hedi Foughali
-      </div>
     </div>
   )
 }

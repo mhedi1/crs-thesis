@@ -98,7 +98,7 @@ export function MovieCard({ movie, candidates, selectedCandidate, followUp }: Mo
               })
             }}
             aria-expanded={open}
-            className="text-[0.75rem] font-medium text-muted-foreground transition-colors hover:text-foreground inline-flex items-center gap-1"
+            className="-mx-2 flex w-full cursor-pointer items-center gap-1 rounded-md px-2 py-2 text-left text-[0.75rem] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             Pipeline Details 
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>

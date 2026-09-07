@@ -29,7 +29,7 @@ export function ChatInput({
         layout
         transition={{ type: "spring", stiffness: 300, damping: 25 }}
         style={{ width: focused || value ? "100%" : "65%" }}
-        className="relative flex items-center bg-card/80 backdrop-blur-xl border border-border/60 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-[28px] px-3 py-2 transition-colors duration-300 focus-within:shadow-[0_16px_50px_rgba(37,99,235,0.2)] focus-within:border-primary/50 hover:border-border cursor-text"
+        className="relative flex items-center bg-card/80 backdrop-blur-xl border border-border/60 shadow-[0_1px_3px_rgb(0,0,0,0.05)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-[28px] px-3 py-2 transition-colors duration-300 focus-within:shadow-[0_2px_10px_rgba(37,99,235,0.12)] dark:focus-within:shadow-[0_16px_50px_rgba(37,99,235,0.2)] focus-within:border-primary/50 hover:border-border cursor-text"
       >
         <textarea
           value={value}

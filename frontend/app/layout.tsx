@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "CineSeek — Conversational Movie Recommender",
+  title: "Conversational Movie Recommender",
   description:
     "A conversational recommender system that surfaces films through natural dialogue, with a transparent view into the retrieval-and-rerank pipeline.",
 }
